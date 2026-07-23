@@ -77,12 +77,13 @@ elif comando == "aguardando_play":
     requests.patch(URL_STATUS, json={"comando": "play"})
     st.rerun()
 
-# 2. EXECUÇÃO DO KARAOKE (FECHA E SAI IMEDIATAMENTE AO TERMINAR OU PARAR)
+# 2. EXECUÇÃO DO KARAOKE COM CONTROLO TOTAL EM JS (VENCE O PROBLEMA DA CACHE/IFRAME)
 elif comando == "play":
     player_karaoke_html = f"""
-    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
-        <div style="position: absolute; top: 15px; text-align: center; width: 100%;">
+    <div id="wrapper-karaoke" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
+        <div style="position: absolute; top: 15px; text-align: center; width: 100%; display: flex; justify-content: center; align-items: center; gap: 20px;">
             <h2 style="color: #00ffcc; font-family: sans-serif; margin: 0; text-shadow: 2px 2px 4px #000;">🎤 A cantar: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h2>
+            <button onclick="forcarSaida()" style="background: red; color: white; border: none; padding: 8px 15px; font-weight: bold; border-radius: 5px; cursor: pointer; font-size: 1rem;">❌ Fechar Vídeo</button>
         </div>
         <video id="karaokeVideo" width="100%" height="90%" autoplay controls style="object-fit: contain;">
             <source src="{url_video}" type="video/mp4">
@@ -90,7 +91,7 @@ elif comando == "play":
         </video>
     </div>
     <script>
-        var video = document.getElementById('karaokeVideo');
+        const video = document.getElementById('karaokeVideo');
         video.muted = false;
         video.loop = false;
         
@@ -100,17 +101,18 @@ elif comando == "play":
             setTimeout(() => {{ video.muted = false; }}, 500);
         }});
 
-        let acaoExecutada = false;
+        let processandoSaida = false;
 
-        function sairDoKaraoke() {{
-            if (acaoExecutada) return;
-            acaoExecutada = true;
+        function forcarSaida() {{
+            if (processandoSaida) return;
+            processandoSaida = true;
 
-            // 1. Para o vídeo localmente de imediato
+            // Destriui o vídeo imediatamente para calar o som
             video.pause();
             video.currentTime = 0;
+            document.getElementById('wrapper-karaoke').innerHTML = "<h1 style='color:white; text-align:center; margin-top:20vh;'>A encerrar actuação...</h1>";
 
-            // 2. Atualiza o Firebase e força o redirecionamento absoluto para limpar o estado
+            // Atualiza o Firebase para limpar o estado de play
             fetch('{URL_STATUS}', {{
                 method: 'PATCH',
                 headers: {{ 'Content-Type': 'application/json' }},
@@ -121,22 +123,22 @@ elif comando == "play":
                     "url_video": "{st.session_state.ultimo_clipe_valido}"
                 }})
             }}).finally(() => {{
+                // Recarrega a página limpa na TV
                 window.location.replace(window.location.href.split('?')[0] + '?prestador={slug}&t=' + new Date().getTime());
             }});
         }}
 
-        // Quando o vídeo termina naturalmente
-        video.onended = function() {{
-            sairDoKaraoke();
-        }};
+        // Quando o vídeo acaba sozinho
+        video.onended = forcarSaida;
 
-        // Monitorização contínua rápida (a cada 1 segundo) para detetar se o prestador clicou em "Parar Vídeo na Tela"
+        // Verifica a cada 1 segundo se o prestador clicou em Parar no telemóvel/painel
         setInterval(() => {{
             fetch('{URL_STATUS}?nocache=' + new Date().getTime())
                 .then(response => response.json())
                 .then(data => {{
-                    if (!data || data.comando === 'parar' || data.comando === 'clipe' || !data.url_video || data.url_video !== '{url_video}') {{
-                        sairDoKaraoke();
+                    // Se o comando no Firebase deixar de ser 'play', fecha o vídeo na hora
+                    if (!data || data.comando !== 'play') {{
+                        forcarSaida();
                     }}
                 }}).catch(err => console.log(err));
         }}, 1000);
