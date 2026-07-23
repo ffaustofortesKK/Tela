@@ -1,7 +1,12 @@
 import streamlit as st
 import requests
 import time
+import cloudinary
+import cloudinary.search
 import streamlit.components.v1 as components
+
+# Configuração Cloudinary
+cloudinary.config(cloud_name="yhwgjh7g", api_key="347924379441394", api_secret="_gzZOnOmzIk6dlmferYm6ck8S08")
 
 st.set_page_config(page_title="FF KARAOKE - TV", layout="wide")
 
@@ -22,6 +27,11 @@ st.markdown("""
             display: flex;
             justify-content: center;
             align-items: center;
+        }
+        .video-clipe-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: fill; 
         }
         .contador-box { font-size: 8rem; color: yellow; font-weight: bold; text-shadow: 0 0 20px red; text-align: center; }
     </style>
@@ -49,17 +59,29 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
+if comando == "play" and (not cantor_atual or not musica_atual):
+    requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": ""})
+    comando = "clipe"
+
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# 0. COMANDO PARAR / RESET PELO PRESTADOR
-if comando == "parar" or (not comando and not url_video and not cantor_atual):
-    # Se o comando for parar, limpa o status no firebase para voltar ao estado normal de clipe/fila
-    if comando == "parar":
-        requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": st.session_state.ultimo_clipe_valido})
+# 0. TRATAMENTO DO COMANDO PARAR / ENCERRAR
+if comando == "parar":
+    st.markdown("""
+        <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
+            <h1 style="color: #ff4444; font-size: 3rem; font-family: sans-serif; text-shadow: 2px 2px 8px #000;">⏹️ ATUAÇÃO PARADA</h1>
+            <p style="color: #ccc; font-size: 1.5rem; font-family: sans-serif;">Aguardando o próximo comando do prestador...</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    if url_video:
+        requests.patch(URL_STATUS, json={"url_video": "", "cantor": "", "musica": ""})
+        
+    time.sleep(3)
     st.rerun()
 
-# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DO KARAOKE
+# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0)
 elif comando == "aguardando_play":
     st.markdown(f"""
         <div style='text-align:center; padding:80px; color:white;'>
@@ -76,11 +98,10 @@ elif comando == "aguardando_play":
         placeholder_contagem.markdown(f'<div class="contador-box">{i}</div>', unsafe_allow_html=True)
         time.sleep(1)
     
-    # Passa automaticamente para play
     requests.patch(URL_STATUS, json={"comando": "play"})
     st.rerun()
 
-# 2. EXECUÇÃO DO VÍDEO DE KARAOKE (ARRANCA SOZINHO E FECHA AO TERMINAR)
+# 2. EXECUÇÃO DO VÍDEO DE KARAOKE (SEM LOOP)
 elif comando == "play":
     player_karaoke_html = f"""
     <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
@@ -97,9 +118,8 @@ elif comando == "play":
         video.muted = false;
         video.loop = false;
         
-        // Forçar o início imediato do vídeo sem cliques
         video.play().catch(error => {{
-            console.log("Autoplay bloqueado, a tentar com mudo:", error);
+            console.log("Erro no autoplay, a reativar:", error);
             video.muted = true;
             video.play();
             setTimeout(() => {{ video.muted = false; }}, 500);
@@ -107,19 +127,18 @@ elif comando == "play":
 
         let jaSaiu = false;
 
-        function voltarParaFila() {{
+        function sairDoKaraoke() {{
             if (jaSaiu) return;
             jaSaiu = true;
 
-            // Atualiza o Firebase para limpar o karaoke e voltar ao modo clipe/fila
             fetch('{URL_STATUS}', {{
                 method: 'PATCH',
                 headers: {{ 'Content-Type': 'application/json' }},
                 body: JSON.stringify({{
                     "comando": "clipe",
+                    "url_video": "{st.session_state.ultimo_clipe_valido}",
                     "cantor": "",
-                    "musica": "",
-                    "url_video": "{st.session_state.ultimo_clipe_valido}"
+                    "musica": ""
                 }})
             }}).then(() => {{
                 window.location.href = window.location.href.split('?')[0] + '?prestador={slug}&nocache=' + new Date().getTime();
@@ -128,31 +147,18 @@ elif comando == "play":
             }});
         }}
 
-        // Assim que o vídeo de karaoke terminar, fecha e volta à fila
-        video.onended = voltarParaFila;
+        video.onended = sairDoKaraoke;
 
-        // Verificação contínua caso o vídeo chegue ao fim
         video.ontimeupdate = function() {{
-            if (video.duration && (video.duration - video.currentTime < 0.3)) {{
-                voltarParaFila();
+            if (video.duration && (video.duration - video.currentTime < 0.5)) {{
+                sairDoKaraoke();
             }}
         }};
-
-        // Sincronização em tempo real: se o prestador carregar em 'Parar' no painel, fecha o player na hora
-        setInterval(() => {{
-            fetch('{URL_STATUS}?nocache=' + new Date().getTime())
-                .then(response => response.json())
-                .then(data => {{
-                    if (data && (data.comando === 'parar' || data.comando === 'clipe' && data.cantor === '')) {{
-                        voltarParaFila();
-                    }}
-                }}).catch(err => console.log(err));
-        }}, 2000);
     </script>
     """
     components.html(player_karaoke_html, height=750)
 
-# 3. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E MINI-PLAYER DO CLIPE À DIREITA
+# 3. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO CLIPE À DIREITA
 else:
     cl1, cl2 = st.columns([1.4, 1.2])
 
@@ -198,15 +204,39 @@ else:
                         width: 100%; height: 100%; object-fit: fill;
                     }}
                     .mini-controls {{
-                        position: absolute; bottom: 5px; left: 5px; right: 5px;
-                        background: rgba(0, 0, 0, 0.85); border: 1px solid #ffd700;
-                        padding: 5px 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; box-sizing: border-box;
+                        position: absolute;
+                        bottom: 5px;
+                        left: 5px;
+                        right: 5px;
+                        background: rgba(0, 0, 0, 0.85);
+                        border: 1px solid #ffd700;
+                        padding: 5px 10px;
+                        border-radius: 6px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        box-sizing: border-box;
                     }}
                     .mini-controls button {{
-                        background: #ffd700; border: none; color: black; font-weight: bold;
-                        padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;
+                        background: #ffd700;
+                        border: none;
+                        color: black;
+                        font-weight: bold;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 0.8rem;
                     }}
-                    .mini-time {{ color: white; font-family: monospace; font-size: 0.75rem; }}
+                    .mini-controls input[type=range] {{
+                        cursor: pointer;
+                        accent-color: #ffd700;
+                        height: 4px;
+                    }}
+                    .mini-time {{
+                        color: white;
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                    }}
                 </style>
             </head>
             <body>
@@ -242,29 +272,25 @@ else:
                     }};
 
                     function togglePlay() {{
-                        if (v.paused) {{ v.play(); btnPlay.innerText = "⏸️"; }}
-                        else {{ v.pause(); btnPlay.innerText = "▶️"; }}
+                        if (v.paused) {{
+                            v.play();
+                            btnPlay.innerText = "⏸️";
+                        }} else {{
+                            v.pause();
+                            btnPlay.innerText = "▶️";
+                        }}
                     }}
 
                     function mudarSeek(val) {{
-                        if (v.duration) {{ v.currentTime = (val * v.duration) / 100; }}
+                        if (v.duration) {{
+                            v.currentTime = (val * v.duration) / 100;
+                        }}
                     }}
 
                     function mudarAudio() {{
                         v.muted = !v.muted;
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
-
-                    // Sincronizador: se o prestador iniciar um karaoke no painel, a tela principal muda logo para o modo de contagem/karaoke
-                    setInterval(() => {{
-                        fetch('{URL_STATUS}?nocache=' + new Date().getTime())
-                            .then(response => response.json())
-                            .then(data => {{
-                                if (data && (data.comando === 'aguardando_play' || data.comando === 'play')) {{
-                                    window.location.reload();
-                                }}
-                            }}).catch(err => console.log(err));
-                    }}, 2000);
                 </script>
             </body>
             </html>
