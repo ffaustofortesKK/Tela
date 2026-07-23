@@ -50,10 +50,10 @@ musica_atual = res_status.get("musica")
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# SE O COMANDO FOR PARA CANTAR (AGUARDANDO PLAY OU PLAY), DELEGAMOS A TOTALIDADE DO FLUXO AO JS PARA EVITAR REFRESHS DO STREAMLIT
+# SE O COMANDO FOR PARA CANTAR, DELEGAMOS TOTALMENTE AO JS COM BOTÃO DE PLAY SEGURO
 if comando in ["aguardando_play", "play"] and url_video:
     
-    player_autonome_html = f"""
+    player_seguro_html = f"""
     <!DOCTYPE html>
     <html>
     <head>
@@ -81,6 +81,13 @@ if comando in ["aguardando_play", "play"] and url_video:
             .intro-text h1 {{ color: #00ff00; font-size: 2.2rem; margin-bottom: 10px; }}
             .intro-text h2 {{ font-size: 3rem; color: white; text-shadow: 2px 2px 4px #000; margin: 5px 0; }}
             .intro-text h3 {{ font-size: 1.8rem; color: yellow; text-shadow: 2px 2px 4px #000; margin: 5px 0; }}
+            
+            #btn-manual-play {{
+                display: none; position: absolute; z-index: 100001;
+                background: #00ff00; color: black; font-size: 2rem; font-weight: bold;
+                padding: 20px 40px; border: none; border-radius: 12px; cursor: pointer;
+                box-shadow: 0 0 30px #00ff00;
+            }}
             video {{
                 width: 100%; height: 90%; object-fit: contain; display: none;
             }}
@@ -96,6 +103,8 @@ if comando in ["aguardando_play", "play"] and url_video:
                 <p style="font-size: 1.5rem; color: #ccc;">O palco vai abrir em:</p>
                 <div id="contador" class="contador-box">3</div>
             </div>
+
+            <button id="btn-manual-play" onclick="forcarPlay()">▶ CLIQUE AQUI PARA INICIAR VÍDEO</button>
 
             <div id="ecra-video" style="display:none; width:100%; height:100%; justify-content:center; align-items:center;">
                 <div class="header-info">
@@ -117,6 +126,7 @@ if comando in ["aguardando_play", "play"] and url_video:
             const ecraVideo = document.getElementById('ecra-video');
             const divContador = document.getElementById('contador');
             const video = document.getElementById('karaokeVideo');
+            const btnManual = document.getElementById('btn-manual-play');
 
             let loopVerificacao = null;
             let jaSaiu = false;
@@ -130,7 +140,6 @@ if comando in ["aguardando_play", "play"] and url_video:
                 video.removeAttribute('src');
                 video.load();
 
-                // Atualiza o Firebase para resetar o estado para clipe normal
                 fetch(urlStatus, {{
                     method: 'PATCH',
                     headers: {{ 'Content-Type': 'application/json' }},
@@ -141,12 +150,10 @@ if comando in ["aguardando_play", "play"] and url_video:
                         "url_video": urlClipeSeguro
                     }})
                 }}).finally(() => {{
-                    // Recarrega a página inteira para limpar o componente e voltar à fila
                     window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
                 }});
             }}
 
-            // 1. Executa a contagem decrescente inteiramente em JS (sempre fluida)
             let count = 3;
             function iniciarContagem() {{
                 let timer = setInterval(() => {{
@@ -167,25 +174,19 @@ if comando in ["aguardando_play", "play"] and url_video:
                 ecraVideo.style.display = 'flex';
                 video.style.display = 'block';
 
-                // Tenta iniciar o vídeo com som de forma garantida
                 video.muted = false;
                 let p = video.play();
                 if (p !== undefined) {{
                     p.catch(error => {{
-                        console.log("Autoplay barrado com som, a tentar com mudo inicial:", error);
-                        video.muted = true;
-                        video.play().then(() => {{
-                            setTimeout(() => {{ video.muted = false; }}, 300);
-                        }});
+                        console.log("Autoplay bloqueado pelo browser. A mostrar botão de clique manual.");
+                        btnManual.style.display = 'block';
                     }});
                 }}
 
-                // Monitoriza o fim natural do vídeo
                 video.onended = function() {{
                     voltarParaPrincipal();
                 }};
 
-                // Monitoriza continuamente se o prestador carregou em "Parar" no painel
                 loopVerificacao = setInterval(() => {{
                     fetch(urlStatus + '?nocache=' + new Date().getTime())
                         .then(res => res.json())
@@ -197,15 +198,20 @@ if comando in ["aguardando_play", "play"] and url_video:
                 }}, 1000);
             }}
 
-            // Arranca a contagem mal o componente abre
+            function forcarPlay() {{
+                btnManual.style.display = 'none';
+                video.muted = false;
+                video.play();
+            }}
+
             setTimeout(iniciarContagem, 500);
         </script>
     </body>
     </html>
     """
-    components.html(player_autonome_html, height=750, scrolling=False)
+    components.html(player_seguro_html, height=750, scrolling=False)
 
-# SE O COMANDO FOR PARAR OU ESTIVER NO ESTADO NORMAL DE CLIPE/FILA
+# ESTADO NORMAL / PARAR
 else:
     if comando == "parar":
         requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": st.session_state.ultimo_clipe_valido})
@@ -312,7 +318,6 @@ else:
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
 
-                    // Verifica se o prestador iniciou um karaoke no painel para atualizar a tela principal
                     setInterval(() => {{
                         fetch('{URL_STATUS}?nocache=' + new Date().getTime())
                             .then(response => response.json())
