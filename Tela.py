@@ -23,6 +23,7 @@ st.markdown("""
             justify-content: center;
             align-items: center;
         }
+        .contador-box { font-size: 8rem; color: yellow; font-weight: bold; text-shadow: 0 0 20px red; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -35,6 +36,7 @@ URL_PEDIDOS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/pedidos_{slug
 if "ultimo_clipe_valido" not in st.session_state:
     st.session_state.ultimo_clipe_valido = ""
 
+# Buscar dados do Firebase
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
     res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
@@ -50,173 +52,108 @@ musica_atual = res_status.get("musica")
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# SE O COMANDO FOR PARA CANTAR, DELEGAMOS TOTALMENTE AO JS COM BOTÃO DE PLAY SEGURO
-if comando in ["aguardando_play", "play"] and url_video:
-    
-    player_seguro_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <style>
-            body, html {{
-                margin: 0; padding: 0; width: 100vw; height: 100vh; background: black; overflow: hidden; font-family: sans-serif;
-            }}
-            .fullscreen-container {{
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black;
-                display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;
-            }}
-            .header-info {{
-                position: absolute; top: 15px; text-align: center; width: 100%; z-index: 100000;
-            }}
-            .header-info h2 {{
-                color: #00ffcc; margin: 0; text-shadow: 2px 2px 4px #000; font-size: 1.8rem;
-            }}
-            .contador-box {{
-                font-size: 10rem; color: yellow; font-weight: bold; text-shadow: 0 0 30px red; text-align: center;
-            }}
-            .intro-text {{
-                text-align: center; color: white; padding: 20px;
-            }}
-            .intro-text h1 {{ color: #00ff00; font-size: 2.2rem; margin-bottom: 10px; }}
-            .intro-text h2 {{ font-size: 3rem; color: white; text-shadow: 2px 2px 4px #000; margin: 5px 0; }}
-            .intro-text h3 {{ font-size: 1.8rem; color: yellow; text-shadow: 2px 2px 4px #000; margin: 5px 0; }}
-            
-            #btn-manual-play {{
-                display: none; position: absolute; z-index: 100001;
-                background: #00ff00; color: black; font-size: 2rem; font-weight: bold;
-                padding: 20px 40px; border: none; border-radius: 12px; cursor: pointer;
-                box-shadow: 0 0 30px #00ff00;
-            }}
-            video {{
-                width: 100%; height: 90%; object-fit: contain; display: none;
-            }}
-        </style>
-    </head>
-    <body>
-        <div id="app" class="fullscreen-container">
-            <div id="ecra-intro" class="intro-text">
-                <h1>A CHAMAR AO PALCO:</h1>
-                <h2 id="txt-cantor">{str(cantor_atual).upper()}</h2>
-                <h3 id="txt-musica">{str(musica_atual).upper()}</h3>
-                <hr style="width: 50%; margin: 20px auto; border-color: #444;">
-                <p style="font-size: 1.5rem; color: #ccc;">O palco vai abrir em:</p>
-                <div id="contador" class="contador-box">3</div>
-            </div>
-
-            <button id="btn-manual-play" onclick="forcarPlay()">▶ CLIQUE AQUI PARA INICIAR VÍDEO</button>
-
-            <div id="ecra-video" style="display:none; width:100%; height:100%; justify-content:center; align-items:center;">
-                <div class="header-info">
-                    <h2>🎤 A cantar: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h2>
-                </div>
-                <video id="karaokeVideo" controls playsinline>
-                    <source src="{url_video}" type="video/mp4">
-                    O seu browser não suporta vídeo.
-                </video>
-            </div>
-        </div>
-
-        <script>
-            const urlStatus = "{URL_STATUS}";
-            const urlClipeSeguro = "{st.session_state.ultimo_clipe_valido}";
-            const slugPrestador = "{slug}";
-
-            const ecraIntro = document.getElementById('ecra-intro');
-            const ecraVideo = document.getElementById('ecra-video');
-            const divContador = document.getElementById('contador');
-            const video = document.getElementById('karaokeVideo');
-            const btnManual = document.getElementById('btn-manual-play');
-
-            let loopVerificacao = null;
-            let jaSaiu = false;
-
-            function voltarParaPrincipal() {{
-                if (jaSaiu) return;
-                jaSaiu = true;
-                if (loopVerificacao) clearInterval(loopVerificacao);
-
-                video.pause();
-                video.removeAttribute('src');
-                video.load();
-
-                fetch(urlStatus, {{
-                    method: 'PATCH',
-                    headers: {{ 'Content-Type': 'application/json' }},
-                    body: JSON.stringify({{
-                        "comando": "clipe",
-                        "cantor": "",
-                        "musica": "",
-                        "url_video": urlClipeSeguro
-                    }})
-                }}).finally(() => {{
-                    window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
-                }});
-            }}
-
-            let count = 3;
-            function iniciarContagem() {{
-                let timer = setInterval(() => {{
-                    count--;
-                    if (count > 0) {{
-                        divContador.innerText = count;
-                    }} else if (count === 0) {{
-                        divContador.innerText = "0";
-                    }} else {{
-                        clearInterval(timer);
-                        transitarParaVideo();
-                    }}
-                }}, 1000);
-            }}
-
-            function transitarParaVideo() {{
-                ecraIntro.style.display = 'none';
-                ecraVideo.style.display = 'flex';
-                video.style.display = 'block';
-
-                video.muted = false;
-                let p = video.play();
-                if (p !== undefined) {{
-                    p.catch(error => {{
-                        console.log("Autoplay bloqueado pelo browser. A mostrar botão de clique manual.");
-                        btnManual.style.display = 'block';
-                    }});
-                }}
-
-                video.onended = function() {{
-                    voltarParaPrincipal();
-                }};
-
-                loopVerificacao = setInterval(() => {{
-                    fetch(urlStatus + '?nocache=' + new Date().getTime())
-                        .then(res => res.json())
-                        .then(data => {{
-                            if (!data || data.comando === 'parar' || data.comando === 'clipe' || !data.url_video || data.url_video !== "{url_video}") {{
-                                voltarParaPrincipal();
-                            }}
-                        }}).catch(err => console.log(err));
-                }}, 1000);
-            }}
-
-            function forcarPlay() {{
-                btnManual.style.display = 'none';
-                video.muted = false;
-                video.play();
-            }}
-
-            setTimeout(iniciarContagem, 500);
-        </script>
-    </body>
-    </html>
-    """
-    components.html(player_seguro_html, height=750, scrolling=False)
-
-# ESTADO NORMAL / PARAR
-else:
+# 0. COMANDO PARAR / RESET PELO PRESTADOR
+if comando == "parar" or (not comando and not url_video and not cantor_atual):
+    # Se o comando for parar, limpa o status no firebase para voltar ao estado normal de clipe/fila
     if comando == "parar":
         requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": st.session_state.ultimo_clipe_valido})
-        st.rerun()
+    st.rerun()
 
+# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DO KARAOKE
+elif comando == "aguardando_play":
+    st.markdown(f"""
+        <div style='text-align:center; padding:80px; color:white;'>
+            <h1 style='font-size: 2.5rem; color: #00ff00;'>A CHAMAR AO PALCO:</h1>
+            <h2 style='font-size: 3.5rem;' class="cantor-style">{str(cantor_atual).upper()}</h2>
+            <h3 style='font-size: 2rem; color: yellow;'>{str(musica_atual).upper()}</h3>
+            <hr style='width: 50%; margin: 20px auto; border-color: #444;'>
+            <p style='font-size: 1.5rem; color: #ccc;'>O palco vai abrir em:</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    placeholder_contagem = st.empty()
+    for i in [3, 2, 1, 0]:
+        placeholder_contagem.markdown(f'<div class="contador-box">{i}</div>', unsafe_allow_html=True)
+        time.sleep(1)
+    
+    # Passa automaticamente para play
+    requests.patch(URL_STATUS, json={"comando": "play"})
+    st.rerun()
+
+# 2. EXECUÇÃO DO VÍDEO DE KARAOKE (ARRANCA SOZINHO E FECHA AO TERMINAR)
+elif comando == "play":
+    player_karaoke_html = f"""
+    <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
+        <div style="position: absolute; top: 15px; text-align: center; width: 100%;">
+            <h2 style="color: #00ffcc; font-family: sans-serif; margin: 0; text-shadow: 2px 2px 4px #000;">🎤 A cantar: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h2>
+        </div>
+        <video id="karaokeVideo" width="100%" height="90%" autoplay controls style="object-fit: contain;">
+            <source src="{url_video}" type="video/mp4">
+            O seu browser não suporta vídeo.
+        </video>
+    </div>
+    <script>
+        var video = document.getElementById('karaokeVideo');
+        video.muted = false;
+        video.loop = false;
+        
+        // Forçar o início imediato do vídeo sem cliques
+        video.play().catch(error => {{
+            console.log("Autoplay bloqueado, a tentar com mudo:", error);
+            video.muted = true;
+            video.play();
+            setTimeout(() => {{ video.muted = false; }}, 500);
+        }});
+
+        let jaSaiu = false;
+
+        function voltarParaFila() {{
+            if (jaSaiu) return;
+            jaSaiu = true;
+
+            // Atualiza o Firebase para limpar o karaoke e voltar ao modo clipe/fila
+            fetch('{URL_STATUS}', {{
+                method: 'PATCH',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{
+                    "comando": "clipe",
+                    "cantor": "",
+                    "musica": "",
+                    "url_video": "{st.session_state.ultimo_clipe_valido}"
+                }})
+            }}).then(() => {{
+                window.location.href = window.location.href.split('?')[0] + '?prestador={slug}&nocache=' + new Date().getTime();
+            }}).catch(() => {{
+                window.location.reload();
+            }});
+        }}
+
+        // Assim que o vídeo de karaoke terminar, fecha e volta à fila
+        video.onended = voltarParaFila;
+
+        // Verificação contínua caso o vídeo chegue ao fim
+        video.ontimeupdate = function() {{
+            if (video.duration && (video.duration - video.currentTime < 0.3)) {{
+                voltarParaFila();
+            }}
+        }};
+
+        // Sincronização em tempo real: se o prestador carregar em 'Parar' no painel, fecha o player na hora
+        setInterval(() => {{
+            fetch('{URL_STATUS}?nocache=' + new Date().getTime())
+                .then(response => response.json())
+                .then(data => {{
+                    if (data && (data.comando === 'parar' || data.comando === 'clipe' && data.cantor === '')) {{
+                        voltarParaFila();
+                    }}
+                }}).catch(err => console.log(err));
+        }}, 2000);
+    </script>
+    """
+    components.html(player_karaoke_html, height=750)
+
+# 3. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E MINI-PLAYER DO CLIPE À DIREITA
+else:
     cl1, cl2 = st.columns([1.4, 1.2])
 
     with cl1:
@@ -318,6 +255,7 @@ else:
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
 
+                    // Sincronizador: se o prestador iniciar um karaoke no painel, a tela principal muda logo para o modo de contagem/karaoke
                     setInterval(() => {{
                         fetch('{URL_STATUS}?nocache=' + new Date().getTime())
                             .then(response => response.json())
