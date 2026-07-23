@@ -50,7 +50,7 @@ musica_atual = res_status.get("musica")
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# SE O COMANDO FOR PARA CANTAR, DELEGAMOS TOTALMENTE AO JS COM BOTÃO DE PLAY SEGURO
+# SE O COMANDO FOR PARA CANTAR, DELEGAMOS TOTALMENTE AO JS COM CONTAGEM E REPRODUÇÃO SEGURA
 if comando in ["aguardando_play", "play"] and url_video:
     
     player_seguro_html = f"""
@@ -211,7 +211,7 @@ if comando in ["aguardando_play", "play"] and url_video:
     """
     components.html(player_seguro_html, height=750, scrolling=False)
 
-# ESTADO NORMAL / PARAR
+# ESTADO NORMAL / PARAR (Fila de espera e vídeo de fundo)
 else:
     if comando == "parar":
         requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": st.session_state.ultimo_clipe_valido})
@@ -339,5 +339,6 @@ else:
                 </div>
             """, unsafe_allow_html=True)
 
+    # Apenas atualiza a fila se estivermos no modo normal (sem vídeo de karaoke a tocar)
     time.sleep(3)
     st.rerun()
