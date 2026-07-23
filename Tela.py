@@ -46,7 +46,7 @@ URL_PEDIDOS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/pedidos_{slug
 if "ultimo_clipe_valido" not in st.session_state:
     st.session_state.ultimo_clipe_valido = ""
 
-# Buscar dados do Firebase
+# Buscar dados do Firebase em tempo real
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
     res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
@@ -66,7 +66,7 @@ if comando == "play" and (not cantor_atual or not musica_atual):
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# 0. TRATAMENTO DO COMANDO PARAR / ENCERRAR
+# 0. COMANDO PARAR / INTERRUPÇÃO IMEDIATA
 if comando == "parar":
     st.markdown("""
         <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
@@ -78,10 +78,10 @@ if comando == "parar":
     if url_video:
         requests.patch(URL_STATUS, json={"url_video": "", "cantor": "", "musica": ""})
         
-    time.sleep(3)
+    time.sleep(2)
     st.rerun()
 
-# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0)
+# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DE ENTRAR NO KARAOKE
 elif comando == "aguardando_play":
     st.markdown(f"""
         <div style='text-align:center; padding:80px; color:white;'>
@@ -101,7 +101,7 @@ elif comando == "aguardando_play":
     requests.patch(URL_STATUS, json={"comando": "play"})
     st.rerun()
 
-# 2. EXECUÇÃO DO VÍDEO DE KARAOKE (SEM LOOP)
+# 2. EXECUÇÃO DO VÍDEO DE KARAOKE (FECHA E VOLTA À FILA QUANDO TERMINA)
 elif comando == "play":
     player_karaoke_html = f"""
     <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
@@ -158,7 +158,7 @@ elif comando == "play":
     """
     components.html(player_karaoke_html, height=750)
 
-# 3. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO CLIPE À DIREITA
+# 3. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E MINI-PLAYER CLIPE À DIREITA
 else:
     cl1, cl2 = st.columns([1.4, 1.2])
 
