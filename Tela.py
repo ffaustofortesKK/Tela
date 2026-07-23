@@ -1,7 +1,12 @@
 import streamlit as st
 import requests
 import time
+import cloudinary
+import cloudinary.search
 import streamlit.components.v1 as components
+
+# Configuração Cloudinary
+cloudinary.config(cloud_name="yhwgjh7g", api_key="347924379441394", api_secret="_gzZOnOmzIk6dlmferYm6ck8S08")
 
 st.set_page_config(page_title="FF KARAOKE - TV", layout="wide")
 
@@ -23,7 +28,11 @@ st.markdown("""
             justify-content: center;
             align-items: center;
         }
-        .contador-box { font-size: 8rem; color: yellow; font-weight: bold; text-shadow: 0 0 20px red; text-align: center; }
+        .video-clipe-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: fill; 
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -36,7 +45,7 @@ URL_PEDIDOS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/pedidos_{slug
 if "ultimo_clipe_valido" not in st.session_state:
     st.session_state.ultimo_clipe_valido = ""
 
-# Buscar dados do Firebase
+# Buscar dados atuais do Firebase
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
     res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
@@ -49,10 +58,11 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
+# Guardar último clipe válido para recuperar quando o karaoke acabar
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# 0. TRATAMENTO DO COMANDO PARAR
+# 0. COMANDO PARAR
 if comando == "parar":
     st.markdown("""
         <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
@@ -60,32 +70,15 @@ if comando == "parar":
             <p style="color: #ccc; font-size: 1.5rem; font-family: sans-serif;">Aguardando o próximo comando do prestador...</p>
         </div>
     """, unsafe_allow_html=True)
+    
+    if url_video:
+        requests.patch(URL_STATUS, json={"url_video": "", "cantor": "", "musica": ""})
+        
     time.sleep(2)
     st.rerun()
 
-# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) E SALTO AUTOMÁTICO PARA PLAY
-elif comando == "aguardando_play":
-    st.markdown(f"""
-        <div style='text-align:center; padding:60px; color:white;'>
-            <h1 style='font-size: 2.2rem; color: #00ff00;'>A CHAMAR AO PALCO:</h1>
-            <h2 style='font-size: 3rem;' class="cantor-style">{str(cantor_atual).upper()}</h2>
-            <h3 style='font-size: 1.8rem; color: yellow;'>{str(musica_atual).upper()}</h3>
-            <hr style='width: 40%; margin: 15px auto; border-color: #444;'>
-            <p style='font-size: 1.3rem; color: #ccc;'>O palco vai abrir em:</p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    placeholder_contagem = st.empty()
-    for i in [3, 2, 1, 0]:
-        placeholder_contagem.markdown(f'<div class="contador-box">{i}</div>', unsafe_allow_html=True)
-        time.sleep(1)
-    
-    # Atualiza automaticamente no Firebase para o estado 'play' para o vídeo arrancar sozinho
-    requests.patch(URL_STATUS, json={"comando": "play"})
-    st.rerun()
-
-# 2. EXECUÇÃO DO VÍDEO DE KARAOKE (ARRANCA SOZINHO E FECHA LOGO AO TERMINAR)
-elif comando == "play":
+# 1. COMANDO AGUARDANDO_PLAY (Arranque imediato do Karaoke sem precisar de cliques)
+elif comando == "aguardando_play" or comando == "play":
     player_karaoke_html = f"""
     <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: black; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
         <div style="position: absolute; top: 15px; text-align: center; width: 100%;">
@@ -101,12 +94,11 @@ elif comando == "play":
         video.muted = false;
         video.loop = false;
         
-        // Força o início automático imediato
         video.play().catch(error => {{
-            console.log("Autoplay bloqueado, a tentar com mudo:", error);
+            console.log("Erro no autoplay:", error);
             video.muted = true;
             video.play();
-            setTimeout(() => {{ video.muted = false; }}, 400);
+            setTimeout(() => {{ video.muted = false; }}, 500);
         }});
 
         let jaSaiu = false;
@@ -115,7 +107,7 @@ elif comando == "play":
             if (jaSaiu) return;
             jaSaiu = true;
 
-            // Restaura o clipe de fundo anterior e sai do modo karaoke
+            // Assim que termina, limpa o estado no Firebase e força o retorno à tela de fila/clipes
             fetch('{URL_STATUS}', {{
                 method: 'PATCH',
                 headers: {{ 'Content-Type': 'application/json' }},
@@ -132,7 +124,7 @@ elif comando == "play":
             }});
         }}
 
-        // Assim que o vídeo de karaoke termina, fecha e regressa à tela inicial
+        // Fecha e regressa imediatamente quando o vídeo chega ao fim
         video.onended = sairDoKaraoke;
 
         video.ontimeupdate = function() {{
@@ -144,7 +136,7 @@ elif comando == "play":
     """
     components.html(player_karaoke_html, height=750)
 
-# 3. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO CLIPE À DIREITA
+# 2. TELA PRINCIPAL (Fila de Espera à Esquerda & Vídeo Clipe de Fundo à Direita)
 else:
     cl1, cl2 = st.columns([1.4, 1.2])
 
@@ -172,15 +164,33 @@ else:
         if url_clipe:
             if nome_clipe_atual:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
             mini_player_html = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
-                    body, html {{ margin: 0; padding: 0; width: 430px; height: 306px; background: black; overflow: hidden; }}
-                    .mini-container {{ position: relative; width: 430px; height: 306px; background: black; display: flex; justify-content: center; align-items: center; }}
-                    video {{ width: 100%; height: 100%; object-fit: fill; }}
+                    body, html {{
+                        margin: 0; padding: 0; width: 430px; height: 306px; background: black; overflow: hidden;
+                    }}
+                    .mini-container {{
+                        position: relative; width: 430px; height: 306px; background: black; display: flex; justify-content: center; align-items: center;
+                    }}
+                    video {{
+                        width: 100%; height: 100%; object-fit: fill;
+                    }}
+                    .mini-controls {{
+                        position: absolute; bottom: 5px; left: 5px; right: 5px;
+                        background: rgba(0, 0, 0, 0.85); border: 1px solid #ffd700;
+                        padding: 5px 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; box-sizing: border-box;
+                    }}
+                    .mini-controls button {{
+                        background: #ffd700; border: none; color: black; font-weight: bold; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;
+                    }}
+                    .mini-controls input[type=range] {{ cursor: pointer; accent-color: #ffd700; height: 4px; }}
+                    .mini-time {{ color: white; font-family: monospace; font-size: 0.75rem; }}
                 </style>
             </head>
             <body>
@@ -188,10 +198,46 @@ else:
                     <video id="mini-video" autoplay loop muted playsinline>
                         <source src="{url_clipe}" type="video/mp4">
                     </video>
+                    
+                    <div class="mini-controls">
+                        <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
+                        <span id="mini-time" class="mini-time">00:00</span>
+                        <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
+                        <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔇</button>
+                    </div>
                 </div>
+                
                 <script>
                     const v = document.getElementById('mini-video');
+                    const seek = document.getElementById('mini-seek');
+                    const timeLbl = document.getElementById('mini-time');
+                    const btnPlay = document.getElementById('btn-play-pause');
+                    const btnAudio = document.getElementById('btn-audio');
+
                     v.play().catch(e => console.log(e));
+
+                    v.ontimeupdate = function() {{
+                        if (v.duration) {{
+                            seek.value = (v.currentTime / v.duration) * 100;
+                            let m = Math.floor(v.currentTime / 60);
+                            let s = Math.floor(v.currentTime % 60);
+                            timeLbl.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+                        }}
+                    }};
+
+                    function togglePlay() {{
+                        if (v.paused) {{ v.play(); btnPlay.innerText = "⏸️"; }}
+                        else {{ v.pause(); btnPlay.innerText = "▶️"; }}
+                    }}
+
+                    function mudarSeek(val) {{
+                        if (v.duration) {{ v.currentTime = (val * v.duration) / 100; }}
+                    }}
+
+                    function mudarAudio() {{
+                        v.muted = !v.muted;
+                        btnAudio.innerText = v.muted ? "🔇" : "🔊";
+                    }}
                 </script>
             </body>
             </html>
@@ -204,6 +250,6 @@ else:
                 </div>
             """, unsafe_allow_html=True)
 
-    # Atualiza a cada 2 segundos para apanhar instantaneamente qualquer clique do prestador (mudar de cantor, parar, etc.)
-    time.sleep(2)
+    # Atualiza ciclicamente para escutar o Firebase e detetar alterações do prestador em tempo real
+    time.sleep(2.5)
     st.rerun()
