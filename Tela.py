@@ -32,9 +32,6 @@ slug = params.get("prestador", "geral")
 URL_STATUS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/status_{slug}.json"
 URL_PEDIDOS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/pedidos_{slug}.json"
 
-if "ultimo_clipe_valido" not in st.session_state:
-    st.session_state.ultimo_clipe_valido = ""
-
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
     res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
@@ -47,10 +44,7 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-if comando == "clipe" and url_video:
-    st.session_state.ultimo_clipe_valido = url_video
-
-# SE O COMANDO FOR PARA CANTAR
+# SE O COMANDO FOR PARA CANTAR (KARAOKE)
 if comando in ["aguardando_play", "play"] and url_video:
     
     player_seguro_html = f"""
@@ -119,7 +113,6 @@ if comando in ["aguardando_play", "play"] and url_video:
 
         <script>
             const urlStatus = "{URL_STATUS}";
-            const urlClipeSeguro = "{st.session_state.ultimo_clipe_valido}";
             const slugPrestador = "{slug}";
             const urlVideoAtual = "{url_video}";
             const cantorAtual = "{str(cantor_atual)}";
@@ -132,7 +125,6 @@ if comando in ["aguardando_play", "play"] and url_video:
 
             let loopVerificacao = null;
             let jaSaiu = false;
-            video.loop = false;
 
             function voltarParaPrincipal() {{
                 if (jaSaiu) return;
@@ -147,7 +139,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                     method: 'PATCH',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{
-                        "comando": "clipe",
+                        "comando": "parar",
                         "cantor": "",
                         "musica": "",
                         "url_video": ""
@@ -181,6 +173,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                 let p = video.play();
                 if (p !== undefined) {{
                     p.catch(error => {{
+                        console.log("Autoplay bloqueado pelo browser.");
                         btnManual.style.display = 'block';
                     }});
                 }}
@@ -215,8 +208,9 @@ if comando in ["aguardando_play", "play"] and url_video:
 
 # ESTADO NORMAL / PARAR (Fila de espera e vídeo de fundo)
 else:
-    if comando == "parar":
-        requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": ""})
+    # Se o comando recebido for "parar", limpa rigorosamente o Firebase para evitar ciclos
+    if comando == "parar" and (url_video or cantor_atual):
+        requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
         st.rerun()
 
     cl1, cl2 = st.columns([1.4, 1.2])
@@ -239,10 +233,9 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        url_clipe = res_status.get("url_video")
-        nome_clipe_atual = res_status.get("musica")
-
-        if url_clipe:
+        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe" E HOUVER URL VÁLIDA
+        if comando == "clipe" and url_video:
+            nome_clipe_atual = res_status.get("musica")
             if nome_clipe_atual:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
             else:
@@ -276,13 +269,12 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <!-- SEM AUTOPLAY DIRETO E SEM LOOP -->
-                    <video id="mini-video" muted playsinline>
-                        <source src="{url_clipe}" type="video/mp4">
+                    <video id="mini-video" autoplay muted playsinline>
+                        <source src="{url_video}" type="video/mp4">
                     </video>
                     
                     <div class="mini-controls">
-                        <button id="btn-play-pause" onclick="togglePlay()">▶️</button>
+                        <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
                         <span id="mini-time" class="mini-time">00:00</span>
                         <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
                         <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔇</button>
@@ -296,15 +288,9 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
-                    // FORÇAR LOOP A FALSE DE FORMA ABSOLUTA
                     v.loop = false;
 
-                    // Tentar reproduzir de forma segura
-                    v.play().then(() => {{
-                        btnPlay.innerText = "⏸️";
-                    }}).catch(e => {{
-                        console.log("Autoplay impedido:", e);
-                    }});
+                    v.play().catch(e => console.log(e));
 
                     v.ontimeupdate = function() {{
                         if (v.duration) {{
@@ -315,7 +301,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO TERMINA: LIMPA O FIREBASE E BLOQUEIA QUALQUER REPETIÇÃO
+                    // QUANDO O VÍDEO ACABA, LIMPA COMPLETAMENTE O FIREBASE E RECARREGA A PÁGINA EM BRANCO
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
@@ -336,13 +322,8 @@ else:
                     }};
 
                     function togglePlay() {{
-                        if (v.paused) {{ 
-                            v.play(); 
-                            btnPlay.innerText = "⏸️"; 
-                        }} else {{ 
-                            v.pause(); 
-                            btnPlay.innerText = "▶️"; 
-                        }}
+                        if (v.paused) {{ v.play(); btnPlay.innerText = "⏸️"; }}
+                        else {{ v.pause(); btnPlay.innerText = "▶️"; }}
                     }}
 
                     function mudarSeek(val) {{
@@ -353,6 +334,16 @@ else:
                         v.muted = !v.muted;
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
+
+                    setInterval(() => {{
+                        fetch('{URL_STATUS}?nocache=' + new Date().getTime())
+                            .then(response => response.json())
+                            .then(data => {{
+                                if (data && (data.comando === 'aguardando_play' || data.comando === 'play')) {{
+                                    window.location.reload();
+                                }}
+                            }}).catch(err => console.log(err));
+                    }}, 2000);
                 </script>
             </body>
             </html>
