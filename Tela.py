@@ -189,16 +189,16 @@ if comando in ["aguardando_play", "play"] and url_video:
                     voltarParaPrincipal();
                 }};
 
-                // MONITORIZAÇÃO ULTRA-RÁPIDA (500ms): Força interrupção imediata se houver novo cantor ou mudança de comando
+                // MONITORIZAÇÃO CONTÍNUA RIGOROSA: Interrompe imediatamente se houver mudança de cantor, url ou comando
                 loopVerificacao = setInterval(() => {{
                     fetch(urlStatus + '?nocache=' + new Date().getTime())
                         .then(res => res.json())
                         .then(data => {{
-                            if (!data || data.comando === 'parar' || data.comando === 'clipe' || data.url_video !== urlVideoAtual || data.cantor !== cantorAtual) {{
+                            if (!data || data.comando === 'parar' || data.comando === 'clipe' || !data.url_video || data.url_video !== urlVideoAtual || data.cantor !== cantorAtual) {{
                                 window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
                             }}
                         }}).catch(err => console.log(err));
-                }}, 500);
+                }}, 800);
             }}
 
             function forcarPlay() {{
@@ -207,7 +207,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                 video.play();
             }}
 
-            // MONITORIZAÇÃO TAMBÉM DURANTE A CONTAGEM DE 3 A 1
+            // MONITORIZAÇÃO DURANTE A CONTAGEM DE 3 A 1
             let monitorContagem = setInterval(() => {{
                 fetch(urlStatus + '?nocache=' + new Date().getTime())
                     .then(res => res.json())
@@ -217,7 +217,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                             window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
                         }}
                     }}).catch(err => console.log(err));
-            }}, 500);
+            }}, 800);
 
             setTimeout(iniciarContagem, 500);
         </script>
@@ -289,7 +289,8 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <video id="mini-video" autoplay loop muted playsinline>
+                    <!-- REMOVIDO O ATRIBUTO LOOP PARA O VÍDEO CLIPE PARAR QUANDO TERMINAR -->
+                    <video id="mini-video" autoplay muted playsinline>
                         <source src="{url_clipe}" type="video/mp4">
                     </video>
                     
@@ -317,6 +318,22 @@ else:
                             let s = Math.floor(v.currentTime % 60);
                             timeLbl.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
                         }}
+                    }};
+
+                    // QUANDO O VÍDEO CLIPE TERMINAR, LIMPA O ESTADO NO FIREBASE PARA FICAR EM ESPERA (PARADO)
+                    v.onended = function() {{
+                        fetch('{URL_STATUS}', {{
+                            method: 'PATCH',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{
+                                "comando": "clipe",
+                                "cantor": "",
+                                "musica": "",
+                                "url_video": ""
+                            }})
+                        }}).finally(() => {{
+                            window.location.reload();
+                        }});
                     }};
 
                     function togglePlay() {{
