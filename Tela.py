@@ -1,6 +1,12 @@
 import streamlit as st
 import requests
 import time
+import cloudinary
+import cloudinary.search
+import streamlit.components.v1 as components
+
+# Configuração Cloudinary
+cloudinary.config(cloud_name="yhwgjh7g", api_key="347924379441394", api_secret="_gzZOnOmzIk6dlmferYm6ck8S08")
 
 st.set_page_config(page_title="FF KARAOKE - TV", layout="wide")
 
@@ -22,6 +28,12 @@ st.markdown("""
             justify-content: center;
             align-items: center;
         }
+        .video-clipe-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: fill; 
+        }
+        .contador-box { font-size: 8rem; color: yellow; font-weight: bold; text-shadow: 0 0 20px red; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -31,6 +43,7 @@ slug = params.get("prestador", "geral")
 URL_STATUS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/status_{slug}.json"
 URL_PEDIDOS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/pedidos_{slug}.json"
 
+# Buscar dados do Firebase
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
     res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
@@ -40,36 +53,35 @@ except:
 
 comando = res_status.get("comando")
 url_video = res_status.get("url_video")
-cantor_atual = res_status.get("cantor")
-musica_atual = res_status.get("musica")
-acao_player = res_status.get("acao_player")
 
-# Se o comando for parar ou stop, limpa tudo no Firebase e força o refresh imediato
-if comando in ["parar", None, ""] or acao_player == "stop":
-    if url_video or cantor_atual or musica_atual or acao_player == "stop":
-        try:
-            requests.put(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": "", "acao_player": "", "id_sessao": "limpo"})
-        except:
-            pass
-    # Recarrega a página para limpar qualquer vestígio de vídeo
+# 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DE EXECUTAR O PEDIDO
+if comando == "aguardando_play":
+    st.markdown(f"""
+        <div style='text-align:center; padding:80px; color:white;'>
+            <h1 style='font-size: 2.5rem; color: #00ff00;'>A CHAMAR AO PALCO:</h1>
+            <h2 style='font-size: 3.5rem;' class="cantor-style">{str(res_status.get('cantor', '')).upper()}</h2>
+            <h3 style='font-size: 2rem; color: yellow;'>{str(res_status.get('musica', '')).upper()}</h3>
+            <hr style='width: 50%; margin: 20px auto; border-color: #444;'>
+            <p style='font-size: 1.5rem; color: #ccc;'>O palco vai abrir em:</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    placeholder_contagem = st.empty()
+    for i in [3, 2, 1, 0]:
+        placeholder_contagem.markdown(f'<div class="contador-box">{i}</div>', unsafe_allow_html=True)
+        time.sleep(1)
+    
+    # Após a contagem, limpa o comando para voltar ao estado normal da tela principal
+    requests.patch(URL_STATUS, json={"comando": "fim"})
     st.rerun()
 
-# 1. MODO KARAOKE (Ecrã Inteiro)
-if comando in ["aguardando_play", "play"] and url_video:
-    st.markdown(f"<h1 style='color: #00ffcc; text-align: center; margin-top: 20px;'>🎤 A CANTAR: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h1>", unsafe_allow_html=True)
-    
-    st.video(url_video, format="video/mp4", autoplay=True)
-    
-    # Deteta se o prestador clicou em stop/parar no painel
-    time.sleep(3)
-    st.rerun()
-
-# 2. ESTADO NORMAL: FILA + VÍDEO CLIPE DE FUNDO (Nativo)
+# 2. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO DENTRO DO RETÂNGULO À DIREITA
 else:
     cl1, cl2 = st.columns([1.4, 1.2])
 
     with cl1:
         st.markdown("<h1 style='color:gold; font-size: 2.2rem; margin-bottom: 15px;'>🎤 FILA DE ESPERA</h1>", unsafe_allow_html=True)
+        
         if res_pedidos:
             pedidos_lista = list(res_pedidos.items())
             contador_exibicao = 1
@@ -85,23 +97,129 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        if comando == "clipe" and url_video:
-            nome_clipe_atual = res_status.get("musica")
-            st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual or 'Vídeo'}</p>", unsafe_allow_html=True)
+        url_clipe = res_status.get("url_video")
+        nome_clipe_atual = res_status.get("musica")
+
+        if url_clipe:
+            if nome_clipe_atual:
+                st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
-            # Reprodutor nativo limpo do Streamlit para o clipe de fundo
-            st.video(url_video, format="video/mp4", autoplay=True, muted=True, loop=True)
-            
-            # Pequena pausa e verificação contínua do estado no Firebase para atualizar se houver Stop
-            time.sleep(3)
-            st.rerun()
+            # HTML encapsulado estritamente dentro das dimensões do retângulo do vídeo clipe (430x306)
+            mini_player_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body, html {{
+                        margin: 0; padding: 0; width: 430px; height: 306px; background: black; overflow: hidden;
+                    }}
+                    .mini-container {{
+                        position: relative; width: 430px; height: 306px; background: black; display: flex; justify-content: center; align-items: center;
+                    }}
+                    video {{
+                        width: 100%; height: 100%; object-fit: fill;
+                    }}
+                    .mini-controls {{
+                        position: absolute;
+                        bottom: 5px;
+                        left: 5px;
+                        right: 5px;
+                        background: rgba(0, 0, 0, 0.85);
+                        border: 1px solid #ffd700;
+                        padding: 5px 10px;
+                        border-radius: 6px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        box-sizing: border-box;
+                    }}
+                    .mini-controls button {{
+                        background: #ffd700;
+                        border: none;
+                        color: black;
+                        font-weight: bold;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 0.8rem;
+                    }}
+                    .mini-controls input[type=range] {{
+                        cursor: pointer;
+                        accent-color: #ffd700;
+                        height: 4px;
+                    }}
+                    .mini-time {{
+                        color: white;
+                        font-family: monospace;
+                        font-size: 0.75rem;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="mini-container">
+                    <video id="mini-video" autoplay loop muted playsinline>
+                        <source src="{url_clipe}" type="video/mp4">
+                    </video>
+                    
+                    <div class="mini-controls">
+                        <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
+                        <span id="mini-time" class="mini-time">00:00</span>
+                        <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
+                        <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔇</button>
+                    </div>
+                </div>
+                
+                <script>
+                    const v = document.getElementById('mini-video');
+                    const seek = document.getElementById('mini-seek');
+                    const timeLbl = document.getElementById('mini-time');
+                    const btnPlay = document.getElementById('btn-play-pause');
+                    const btnAudio = document.getElementById('btn-audio');
+
+                    v.play().catch(e => console.log(e));
+
+                    v.ontimeupdate = function() {{
+                        if (v.duration) {{
+                            seek.value = (v.currentTime / v.duration) * 100;
+                            let m = Math.floor(v.currentTime / 60);
+                            let s = Math.floor(v.currentTime % 60);
+                            timeLbl.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+                        }}
+                    }};
+
+                    function togglePlay() {{
+                        if (v.paused) {{
+                            v.play();
+                            btnPlay.innerText = "⏸️";
+                        }} else {{
+                            v.pause();
+                            btnPlay.innerText = "▶️";
+                        }}
+                    }}
+
+                    function mudarSeek(val) {{
+                        if (v.duration) {{
+                            v.currentTime = (val * v.duration) / 100;
+                        }}
+                    }}
+
+                    function mudarAudio() {{
+                        v.muted = !v.muted;
+                        btnAudio.innerText = v.muted ? "🔇" : "🔊";
+                    }}
+                </script>
+            </body>
+            </html>
+            """
+            components.html(mini_player_html, height=316, scrolling=False)
         else:
             st.markdown("""
                 <div class="video-clipe-box" style="display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
                     <p style="margin: 0; font-size: 1rem;">Aguardando o prestador selecionar um vídeo clipe no painel de controle...</p>
                 </div>
             """, unsafe_allow_html=True)
-            
-            # Fica à escuta por novos comandos na nuvem
-            time.sleep(3)
-            st.rerun()
+
+    time.sleep(3)
+    st.rerun()
