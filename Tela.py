@@ -125,10 +125,6 @@ if comando in ["aguardando_play", "play"] and url_video:
             const slugPrestador = "{slug}";
             const sessaoAtual = "{id_sessao}";
             
-            if (sessionStorage.getItem('executado_' + sessaoAtual)) {{
-                window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
-            }}
-
             const ecraIntro = document.getElementById('ecra-intro');
             const ecraVideo = document.getElementById('ecra-video');
             const divContador = document.getElementById('contador');
@@ -141,8 +137,6 @@ if comando in ["aguardando_play", "play"] and url_video:
             function voltarParaPrincipal() {{
                 if (jaSaiu) return;
                 jaSaiu = true;
-                
-                sessionStorage.setItem('executado_' + sessaoAtual, 'true');
 
                 video.pause();
                 video.currentTime = 0;
@@ -195,7 +189,7 @@ if comando in ["aguardando_play", "play"] and url_video:
     """
     components.html(player_seguro_html, height=750, scrolling=False)
 
-# ESTADO NORMAL / VÍDEO CLIPE DE FUNDO
+# ESTADO NORMAL / LEITOR DE VÍDEO CLIPE INDEPENDENTE
 else:
     cl1, cl2 = st.columns([1.4, 1.2])
 
@@ -220,99 +214,110 @@ else:
             nome_clipe_atual = res_status.get("musica")
             st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual or 'Vídeo'}</p>", unsafe_allow_html=True)
             
-            mini_player_html = f"""
+            # NOVO LEITOR DE VÍDEO CLIPE BLINDADO CONTRA LOOPS
+            leitor_clipe_html = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
                     body, html {{ margin: 0; padding: 0; width: 430px; height: 306px; background: black; overflow: hidden; }}
-                    .mini-container {{ position: relative; width: 430px; height: 306px; background: black; display: flex; justify-content: center; align-items: center; }}
+                    .box-clipe {{ position: relative; width: 430px; height: 306px; background: black; display: flex; justify-content: center; align-items: center; }}
                     video {{ width: 100%; height: 100%; object-fit: fill; }}
-                    .mini-controls {{ position: absolute; bottom: 5px; left: 5px; right: 5px; background: rgba(0, 0, 0, 0.85); border: 1px solid #ffd700; padding: 5px 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; box-sizing: border-box; }}
-                    .mini-controls button {{ background: #ffd700; border: none; color: black; font-weight: bold; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }}
-                    .mini-time {{ color: white; font-family: monospace; font-size: 0.75rem; }}
+                    .controlo-barra {{ position: absolute; bottom: 5px; left: 5px; right: 5px; background: rgba(0, 0, 0, 0.85); border: 1px solid #ffd700; padding: 5px 10px; border-radius: 6px; display: flex; align-items: center; gap: 8px; box-sizing: border-box; }}
+                    .controlo-barra button {{ background: #ffd700; border: none; color: black; font-weight: bold; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }}
+                    .tempo-txt {{ color: white; font-family: monospace; font-size: 0.75rem; }}
                 </style>
             </head>
             <body>
-                <div class="mini-container" id="mini-app">
-                    <video id="mini-video" muted playsinline>
+                <div class="box-clipe" id="containerClipe">
+                    <video id="videoClipe" playsinline>
                         <source src="{url_video}" type="video/mp4">
                     </video>
-                    <div class="mini-controls">
-                        <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
-                        <span id="mini-time" class="mini-time">00:00</span>
-                        <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
-                        <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔇</button>
+                    <div class="controlo-barra">
+                        <button id="btnPlayPause" onclick="controlarPlay()">⏸️</button>
+                        <span id="txtTempo" class="tempo-txt">00:00</span>
+                        <input type="range" id="barraSeek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="ajustarSeek(this.value)">
+                        <button onclick="ajustarAudio()" id="btnAudio" style="background: #333; color: white;">🔇</button>
                     </div>
                 </div>
                 
                 <script>
-                    const v = document.getElementById('mini-video');
-                    const sessaoAtual = "{id_sessao}";
+                    const vid = document.getElementById('videoClipe');
+                    const urlStatus = "{URL_STATUS}";
+                    const slugTV = "{slug}";
+
+                    // Garante explicitamente que o loop está desligado
+                    vid.loop = false;
+                    vid.muted = true;
+                    vid.autoplay = true;
                     
-                    if (sessionStorage.getItem('executado_clipe_' + sessaoAtual)) {{
-                        fetch('{URL_STATUS}', {{
-                            method: 'PUT',
-                            headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{"comando": "parar", "cantor": "", "musica": "", "url_video": "", "id_sessao": "fim_clipe"}})
-                        }}).finally(() => {{
-                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + '{slug}' + '&t=' + new Date().getTime());
-                        }});
-                    }}
+                    vid.play().catch(err => console.log("Autoplay bloqueado:", err));
 
-                    v.loop = false;
-                    v.autoplay = true;
-                    v.play().catch(e => console.log(e));
-
-                    v.ontimeupdate = function() {{
-                        if (v.duration) {{
-                            document.getElementById('mini-seek').value = (v.currentTime / v.duration) * 100;
-                            let m = Math.floor(v.currentTime / 60);
-                            let s = Math.floor(v.currentTime % 60);
-                            document.getElementById('mini-time').innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+                    vid.ontimeupdate = function() {{
+                        if (vid.duration) {{
+                            document.getElementById('barraSeek').value = (vid.currentTime / vid.duration) * 100;
+                            let min = Math.floor(vid.currentTime / 60);
+                            let seg = Math.floor(vid.currentTime % 60);
+                            document.getElementById('txtTempo').innerText = (min < 10 ? "0" + min : min) + ":" + (seg < 10 ? "0" + seg : seg);
                         }}
                     }};
 
-                    v.onended = function() {{
-                        sessionStorage.setItem('executado_clipe_' + sessaoAtual, 'true');
-                        v.pause();
-                        document.getElementById('mini-app').innerHTML = "<div style='color: #888; text-align: center; width: 100%;'>Clipe finalizado.</div>";
+                    // QUANDO O VÍDEO CLIPE ACABA, LIMPA O FIREBASE E ATUALIZA A TELA UMA SÓ VEZ
+                    vid.onended = function() {{
+                        vid.pause();
+                        document.getElementById('containerClipe').innerHTML = "<div style='color: #888; text-align: center; width: 100%; font-size: 0.9rem;'>Clipe concluído. A aguardar...</div>";
 
-                        fetch('{URL_STATUS}', {{
+                        fetch(urlStatus, {{
                             method: 'PUT',
                             headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{"comando": "parar", "cantor": "", "musica": "", "url_video": "", "id_sessao": "fim_clipe"}})
+                            body: JSON.stringify({{
+                                "comando": "parar",
+                                "cantor": "",
+                                "musica": "",
+                                "url_video": "",
+                                "id_sessao": "fim_clipe_" + new Date().getTime()
+                            }})
                         }}).finally(() => {{
-                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + '{slug}' + '&t=' + new Date().getTime());
+                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugTV + '&t=' + new Date().getTime());
                         }});
                     }};
 
-                    function togglePlay() {{
-                        if (v.paused) {{ v.play(); document.getElementById('btn-play-pause').innerText = "⏸️"; }}
-                        else {{ v.pause(); document.getElementById('btn-play-pause').innerText = "▶️"; }}
-                    }}
-                    function mudarSeek(val) {{
-                        if (v.duration) {{ v.currentTime = (val * v.duration) / 100; }}
-                    }}
-                    function mudarAudio() {{
-                        v.muted = !v.muted;
-                        document.getElementById('btn-audio').innerText = v.muted ? "🔇" : "🔊";
+                    function controlarPlay() {{
+                        if (vid.paused) {{
+                            vid.play();
+                            document.getElementById('btnPlayPause').innerText = "⏸️";
+                        }} else {{
+                            vid.pause();
+                            document.getElementById('btnPlayPause').innerText = "▶️";
+                        }}
                     }}
 
+                    function ajustarSeek(val) {{
+                        if (vid.duration) {{
+                            vid.currentTime = (val * vid.duration) / 100;
+                        }}
+                    }}
+
+                    function ajustarAudio() {{
+                        vid.muted = !vid.muted;
+                        document.getElementById('btnAudio').innerText = vid.muted ? "🔇" : "🔊";
+                    }}
+
+                    // Deteta se o prestador enviou novo comando ou parou
                     setInterval(() => {{
-                        fetch('{URL_STATUS}?nocache=' + new Date().getTime())
+                        fetch(urlStatus + '?nocache=' + new Date().getTime())
                             .then(res => res.json())
                             .then(data => {{
-                                if (data && data.url_video && data.id_sessao !== sessaoAtual) {{
+                                if (!data || !data.url_video || data.comando === 'parar') {{
                                     window.location.reload();
                                 }}
                             }});
-                    }}, 3000);
+                    }, 3000);
                 </script>
             </body>
             </html>
             """
-            components.html(mini_player_html, height=316, scrolling=False)
+            components.html(leitor_clipe_html, height=316, scrolling=False)
         else:
             st.markdown("""
                 <div class="video-clipe-box" style="display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
