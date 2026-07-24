@@ -37,7 +37,7 @@ if "ultimo_clipe_valido" not in st.session_state:
 
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
-    res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() .get("pedidos") if isinstance(requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json(), dict) else (requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {})
+    res_pedidos = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
 except:
     res_status = {}
     res_pedidos = {}
@@ -47,11 +47,10 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-# Guarda o último clipe válido se o comando atual for para reproduzir clipe na caixa menor
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# SE O COMANDO FOR PARA CANTAR (KARAOKE), OCUPA O ECRÃ INTEIRO COM CONTAGEM E PLAYER SEGURO
+# SE O COMANDO FOR PARA CANTAR, DELEGAMOS TOTALMENTE AO JS COM CONTAGEM E REPRODUÇÃO SEGURA
 if comando in ["aguardando_play", "play"] and url_video:
     
     player_seguro_html = f"""
@@ -120,8 +119,10 @@ if comando in ["aguardando_play", "play"] and url_video:
 
         <script>
             const urlStatus = "{URL_STATUS}";
+            const urlClipeSeguro = "{st.session_state.ultimo_clipe_valido}";
             const slugPrestador = "{slug}";
             const urlVideoAtual = "{url_video}";
+            const cantorAtual = "{str(cantor_atual)}";
 
             const ecraIntro = document.getElementById('ecra-intro');
             const ecraVideo = document.getElementById('ecra-video');
@@ -148,7 +149,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                         "comando": "clipe",
                         "cantor": "",
                         "musica": "",
-                        "url_video": ""
+                        "url_video": urlClipeSeguro
                     }})
                 }}).finally(() => {{
                     window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
@@ -188,16 +189,16 @@ if comando in ["aguardando_play", "play"] and url_video:
                     voltarParaPrincipal();
                 }};
 
-                // MONITORIZAÇÃO CONTÍNUA: Se o prestador chamar outro cantor ou alterar o comando, fecha imediatamente
+                // MONITORIZAÇÃO ULTRA-RÁPIDA (500ms): Força interrupção imediata se houver novo cantor ou mudança de comando
                 loopVerificacao = setInterval(() => {{
                     fetch(urlStatus + '?nocache=' + new Date().getTime())
                         .then(res => res.json())
                         .then(data => {{
-                            if (!data || data.comando === 'parar' || !data.url_video || data.url_video !== urlVideoAtual) {{
+                            if (!data || data.comando === 'parar' || data.comando === 'clipe' || data.url_video !== urlVideoAtual || data.cantor !== cantorAtual) {{
                                 window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
                             }}
                         }}).catch(err => console.log(err));
-                }}, 800);
+                }}, 500);
             }}
 
             function forcarPlay() {{
@@ -206,16 +207,17 @@ if comando in ["aguardando_play", "play"] and url_video:
                 video.play();
             }}
 
+            // MONITORIZAÇÃO TAMBÉM DURANTE A CONTAGEM DE 3 A 1
             let monitorContagem = setInterval(() => {{
                 fetch(urlStatus + '?nocache=' + new Date().getTime())
                     .then(res => res.json())
                     .then(data => {{
-                        if (data && (data.url_video !== urlVideoAtual || data.comando === 'parar')) {{
+                        if (data && (data.url_video !== urlVideoAtual || data.cantor !== cantorAtual || data.comando === 'parar' || data.comando === 'clipe')) {{
                             clearInterval(monitorContagem);
                             window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
                         }}
                     }}).catch(err => console.log(err));
-            }}, 800);
+            }}, 500);
 
             setTimeout(iniciarContagem, 500);
         </script>
@@ -224,7 +226,7 @@ if comando in ["aguardando_play", "play"] and url_video:
     """
     components.html(player_seguro_html, height=750, scrolling=False)
 
-# ESTADO NORMAL (Fila de espera no lado esquerdo e o Vídeo Clipe a correr na caixinha à direita)
+# ESTADO NORMAL / PARAR (Fila de espera e vídeo de fundo)
 else:
     if comando == "parar":
         requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": st.session_state.ultimo_clipe_valido})
@@ -235,13 +237,8 @@ else:
     with cl1:
         st.markdown("<h1 style='color:gold; font-size: 2.2rem; margin-bottom: 15px;'>🎤 FILA DE ESPERA</h1>", unsafe_allow_html=True)
         
-        try:
-            res_pedidos_dict = requests.get(f"{URL_PEDIDOS}?nocache={time.time()}", timeout=5).json() or {}
-        except:
-            res_pedidos_dict = {}
-
-        if res_pedidos_dict:
-            pedidos_lista = list(res_pedidos_dict.items())
+        if res_pedidos:
+            pedidos_lista = list(res_pedidos.items())
             contador_exibicao = 1
             for p_id, p in pedidos_lista:
                 if not str(p.get('musica', '')).startswith("PEDIDO:"):
@@ -255,14 +252,14 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        url_clipe = res_status.get("url_video") if comando == "clipe" else st.session_state.ultimo_clipe_valido
-        nome_clipe_atual = res_status.get("musica") if comando == "clipe" else ""
+        url_clipe = res_status.get("url_video")
+        nome_clipe_atual = res_status.get("musica")
 
         if url_clipe:
             if nome_clipe_atual:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
             else:
-                st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo clipe</p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
             mini_player_html = f"""
             <!DOCTYPE html>
@@ -344,7 +341,7 @@ else:
                                     window.location.reload();
                                 }}
                             }}).catch(err => console.log(err));
-                    }}, 1500);
+                    }}, 2000);
                 </script>
             </body>
             </html>
