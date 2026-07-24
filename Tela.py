@@ -289,7 +289,7 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <!-- REMOVIDO O ATRIBUTO LOOP PARA O VÍDEO CLIPE PARAR QUANDO TERMINAR -->
+                    <!-- VÍDEO DO CLIPE SEM LOOP -->
                     <video id="mini-video" autoplay muted playsinline>
                         <source src="{url_clipe}" type="video/mp4">
                     </video>
@@ -320,19 +320,19 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO CLIPE TERMINAR, LIMPA O ESTADO NO FIREBASE PARA FICAR EM ESPERA (PARADO)
+                    // QUANDO O VÍDEO CLIPE TERMINAR, LIMPA O URL NO FIREBASE E RECARREGA PARA FICAR PARADO
                     v.onended = function() {{
                         fetch('{URL_STATUS}', {{
                             method: 'PATCH',
                             headers: {{ 'Content-Type': 'application/json' }},
                             body: JSON.stringify({{
-                                "comando": "clipe",
+                                "comando": "parar",
                                 "cantor": "",
                                 "musica": "",
                                 "url_video": ""
                             }})
                         }}).finally(() => {{
-                            window.location.reload();
+                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + '{slug}' + '&t=' + new Date().getTime());
                         }});
                     }};
 
