@@ -121,6 +121,7 @@ if comando in ["aguardando_play", "play"] and url_video:
             const urlStatus = "{URL_STATUS}";
             const urlClipeSeguro = "{st.session_state.ultimo_clipe_valido}";
             const slugPrestador = "{slug}";
+            const urlVideoAtual = "{url_video}";
 
             const ecraIntro = document.getElementById('ecra-intro');
             const ecraVideo = document.getElementById('ecra-video');
@@ -187,12 +188,13 @@ if comando in ["aguardando_play", "play"] and url_video:
                     voltarParaPrincipal();
                 }};
 
+                // MONITORIZAÇÃO CONTÍNIA: Se o prestador chamar outro cantor ou alterar o comando, fecha imediatamente e atualiza
                 loopVerificacao = setInterval(() => {{
                     fetch(urlStatus + '?nocache=' + new Date().getTime())
                         .then(res => res.json())
                         .then(data => {{
-                            if (!data || data.comando === 'parar' || data.comando === 'clipe' || !data.url_video || data.url_video !== "{url_video}") {{
-                                voltarParaPrincipal();
+                            if (!data || data.comando === 'parar' || data.comando === 'clipe' || !data.url_video || data.url_video !== urlVideoAtual) {{
+                                window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
                             }}
                         }}).catch(err => console.log(err));
                 }}, 1000);
@@ -203,6 +205,18 @@ if comando in ["aguardando_play", "play"] and url_video:
                 video.muted = false;
                 video.play();
             }}
+
+            // MONITORIZAÇÃO TAMBÉM DURANTE A CONTAGEM DE 3 A 1 (caso o prestador mude de ideias logo no início)
+            let monitorContagem = setInterval(() => {{
+                fetch(urlStatus + '?nocache=' + new Date().getTime())
+                    .then(res => res.json())
+                    .then(data => {{
+                        if (data && (data.url_video !== urlVideoAtual || data.comando === 'parar' || data.comando === 'clipe')) {{
+                            clearInterval(monitorContagem);
+                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
+                        }}
+                    }}).catch(err => console.log(err));
+            }}, 1000);
 
             setTimeout(iniciarContagem, 500);
         </script>
@@ -339,6 +353,5 @@ else:
                 </div>
             """, unsafe_allow_html=True)
 
-    # Apenas atualiza a fila se estivermos no modo normal (sem vídeo de karaoke a tocar)
     time.sleep(3)
     st.rerun()
