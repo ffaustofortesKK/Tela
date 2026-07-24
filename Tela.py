@@ -44,7 +44,6 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-# Se o comando for para parar, limpa o Firebase de imediato
 if comando in ["parar", None, ""]:
     if url_video or cantor_atual or musica_atual:
         try:
@@ -134,7 +133,10 @@ if comando in ["aguardando_play", "play"] and url_video:
 
             let loopVerificacao = null;
             let jaSaiu = false;
+            
+            // GARANTIA TOTAL ANTI-LOOP
             video.loop = false;
+            video.removeAttribute('loop');
 
             function voltarParaPrincipal() {{
                 if (jaSaiu) return;
@@ -142,8 +144,9 @@ if comando in ["aguardando_play", "play"] and url_video:
                 if (loopVerificacao) clearInterval(loopVerificacao);
 
                 video.pause();
-                video.removeAttribute('src');
-                video.load();
+                video.currentTime = 0;
+                video.innerHTML = "";
+                document.getElementById('app').innerHTML = "<h1 style='color:white; text-align:center;'>A encerrar actuação...</h1>";
 
                 fetch(urlStatus, {{
                     method: 'PATCH',
@@ -262,7 +265,7 @@ else:
                 </style>
             </head>
             <body>
-                <div class="mini-container">
+                <div class="mini-container" id="mini-app">
                     <video id="mini-video" muted playsinline>
                         <source src="{url_video}" type="video/mp4">
                     </video>
@@ -282,7 +285,9 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
+                    // TRAVÃO ABSOLUTO ANTI-LOOP
                     v.loop = false;
+                    v.removeAttribute('loop');
                     v.autoplay = true;
                     v.play().catch(e => console.log(e));
 
@@ -295,11 +300,11 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO TERMINA: LIMPA O FIREBASE E FAZ REDIRECT PARA PARAR A REPETIÇÃO
+                    // QUANDO O VÍDEO TERMINA: DESTRÓI O PLAYER E LIMPA O FIREBASE DE VEZ
                     v.onended = function() {{
                         v.pause();
-                        v.removeAttribute('src');
-                        v.load();
+                        v.currentTime = 0;
+                        document.getElementById('mini-app').innerHTML = "<div style='color: #888; text-align: center; width: 100%;'>Clipe finalizado.</div>";
 
                         fetch('{URL_STATUS}', {{
                             method: 'PATCH',
@@ -329,7 +334,6 @@ else:
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
 
-                    // Apenas verifica alterações no Firebase a cada 3 segundos SEM recarregar o Python inteiro do Streamlit
                     setInterval(() => {{
                         fetch('{URL_STATUS}?nocache=' + new Date().getTime())
                             .then(response => response.json())
@@ -351,7 +355,6 @@ else:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Polling em JavaScript para detetar quando o prestador envia um novo clipe, sem forçar reruns do Streamlit
             espera_ativa_html = f"""
             <script>
                 setInterval(() => {{
