@@ -44,6 +44,17 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
+# SEGURANÇA: Se não for um comando ativo de canto ou clipe, limpa o vídeo pendente no Firebase para nunca repetir sozinho
+if comando not in ["aguardando_play", "play", "clipe"]:
+    if url_video or cantor_atual or musica_atual:
+        try:
+            requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
+            url_video = ""
+            cantor_atual = ""
+            musica_atual = ""
+        except:
+            pass
+
 # SE O COMANDO FOR PARA CANTAR (KARAOKE)
 if comando in ["aguardando_play", "play"] and url_video:
     
@@ -208,11 +219,6 @@ if comando in ["aguardando_play", "play"] and url_video:
 
 # ESTADO NORMAL / PARAR (Fila de espera e vídeo de fundo)
 else:
-    # Se o comando recebido for "parar", limpa rigorosamente o Firebase para evitar ciclos
-    if comando == "parar" and (url_video or cantor_atual):
-        requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
-        st.rerun()
-
     cl1, cl2 = st.columns([1.4, 1.2])
 
     with cl1:
@@ -233,7 +239,7 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe" E HOUVER URL VÁLIDA
+        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe"
         if comando == "clipe" and url_video:
             nome_clipe_atual = res_status.get("musica")
             if nome_clipe_atual:
@@ -301,7 +307,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO ACABA, LIMPA COMPLETAMENTE O FIREBASE E RECARREGA A PÁGINA EM BRANCO
+                    // QUANDO O VÍDEO ACABA, LIMPA COMPLETAMENTE O FIREBASE E RECARREGA EM BRANCO
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
