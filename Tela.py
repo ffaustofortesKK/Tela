@@ -28,9 +28,17 @@ st.markdown("""
 
 params = st.query_params
 slug = params.get("prestador", "geral")
+reset_forçado = params.get("reset", "")
 
 URL_STATUS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/status_{slug}.json"
 URL_PEDIDOS = f"https://grupoffkaraoke-default-rtdb.firebaseio.com/pedidos_{slug}.json"
+
+# Se o parâmetro de reset estiver ativo (vindo do fim do vídeo), limpa o Firebase de imediato no arranque
+if reset_forçado == "1":
+    try:
+        requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
+    except:
+        pass
 
 try:
     res_status = requests.get(f"{URL_STATUS}?nocache={time.time()}", timeout=5).json() or {}
@@ -44,17 +52,17 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-# CORREÇÃO CRUCIAL: Se o comando for "clipe" mas houver um parâmetro de reset na URL ou se quisermos garantir que o F5 limpa,
-# podes limpar. Mas para o comportamento normal de parar o loop: se o comando não for explicitamente "play" ou "aguardando_play",
-# vamos verificar se devemos limpar. Se quiseres que o clipe pare sozinho ao fazer F5, removemos o "clipe" daqui.
-# ATENÇÃO: Aqui limpamos se o comando for "parar" ou se não houver fila ativa e o comando for antigo.
-if comando == "parar" or not comando:
+# SEGURANÇA TOTAL: Se o comando for "parar" ou se não houver um comando válido e ativo, limpa o estado pendente
+if comando in ["parar", None, ""] or (comando == "clipe" and reset_forçado == "1"):
     if url_video or cantor_atual or musica_atual:
-        requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
-        url_video = ""
-        cantor_atual = ""
-        musica_atual = ""
-        comando = "parar"
+        try:
+            requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
+            url_video = ""
+            cantor_atual = ""
+            musica_atual = ""
+            comando = "parar"
+        except:
+            pass
 
 # SE O COMANDO FOR PARA CANTAR (KARAOKE)
 if comando in ["aguardando_play", "play"] and url_video:
@@ -158,7 +166,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                         "url_video": ""
                     }})
                 }}).finally(() => {{
-                    window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
+                    window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&reset=1&t=' + new Date().getTime());
                 }});
             }}
 
@@ -200,7 +208,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                         .then(res => res.json())
                         .then(data => {{
                             if (!data || data.comando === 'parar' || data.comando === 'clipe' || !data.url_video || data.url_video !== urlVideoAtual || data.cantor !== cantorAtual) {{
-                                window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
+                                window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&reset=1&t=' + new Date().getTime());
                             }}
                         }}).catch(err => console.log(err));
                 }}, 800);
@@ -241,8 +249,8 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe" E HOUVER URL
-        if comando == "clipe" and url_video:
+        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe" E HOUVER URL VÁLIDA (E NÃO ESTIVER NO ESTADO DE RESET)
+        if comando == "clipe" and url_video and reset_forçado != "1":
             nome_clipe_atual = res_status.get("musica")
             if nome_clipe_atual:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
@@ -309,7 +317,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO TERMINA, LIMPA IMEDIATAMENTE O FIREBASE E FORÇA O REFRESH COM PARÂMETRO DE RESET
+                    // QUANDO O VÍDEO TERMINA, LIMPA IMEDIATAMENTE O FIREBASE E RECARREGA COM RESET
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
@@ -348,7 +356,6 @@ else:
                             .then(response => response.json())
                             .then(data => {{
                                 if (data && (data.comando === 'aguardando_play' || data.comando === 'play' || (data.comando === 'clipe' && data.url_video))) {{
-                                    // Só recarrega se houver alteração real no comando
                                     window.location.reload();
                                 }}
                             }}).catch(err => console.log(err));
