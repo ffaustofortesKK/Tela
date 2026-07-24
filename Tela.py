@@ -50,7 +50,7 @@ musica_atual = res_status.get("musica")
 if comando == "clipe" and url_video:
     st.session_state.ultimo_clipe_valido = url_video
 
-# SE O COMANDO FOR PARA CANTAR, DELEGAMOS TOTALMENTE AO JS COM CONTAGEM E REPRODUÇÃO SEGURA
+# SE O COMANDO FOR PARA CANTAR
 if comando in ["aguardando_play", "play"] and url_video:
     
     player_seguro_html = f"""
@@ -110,7 +110,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                 <div class="header-info">
                     <h2>🎤 A cantar: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h2>
                 </div>
-                <!-- SEM LOOP -->
+                <!-- ATENÇÃO: controls playsinline (SEM LOOP) -->
                 <video id="karaokeVideo" controls playsinline>
                     <source src="{url_video}" type="video/mp4">
                     O seu browser não suporta vídeo.
@@ -181,7 +181,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                 let p = video.play();
                 if (p !== undefined) {{
                     p.catch(error => {{
-                        console.log("Autoplay bloqueado pelo browser. A mostrar botão de clique manual.");
+                        console.log("Autoplay bloqueado pelo browser.");
                         btnManual.style.display = 'block';
                     }});
                 }}
@@ -288,7 +288,7 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <!-- VÍDEO CLIPE SEM LOOP: TERMINA E LIMPA O ESTADO NO FIREBASE -->
+                    <!-- GARANTIDO SEM LOOP: autoplay muted playsinline (SEM LOOP) -->
                     <video id="mini-video" autoplay muted playsinline>
                         <source src="{url_clipe}" type="video/mp4">
                     </video>
@@ -308,6 +308,9 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
+                    // Assegura explicitamente via JavaScript que o loop está desligado
+                    v.loop = false;
+
                     v.play().catch(e => console.log(e));
 
                     v.ontimeupdate = function() {{
@@ -319,8 +322,12 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO CLIPE CHEGA AO FIM, LIMPA O URL NO FIREBASE E ATUALIZA A TELA (FICA EM ESPERA)
+                    // QUANDO O VÍDEO CLIPE TERMINA, LIMPA TOTALMENTE O FIREBASE E DESLIGA A URL PARA NÃO REPETIR
                     v.onended = function() {{
+                        v.pause();
+                        v.removeAttribute('src');
+                        v.load();
+
                         fetch('{URL_STATUS}', {{
                             method: 'PATCH',
                             headers: {{ 'Content-Type': 'application/json' }},
