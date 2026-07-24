@@ -44,16 +44,17 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-# SEGURANÇA: Se não for um comando ativo, limpa o Firebase para nunca reativar sozinho
-if comando not in ["aguardando_play", "play", "clipe"]:
+# CORREÇÃO CRUCIAL: Se o comando for "clipe" mas houver um parâmetro de reset na URL ou se quisermos garantir que o F5 limpa,
+# podes limpar. Mas para o comportamento normal de parar o loop: se o comando não for explicitamente "play" ou "aguardando_play",
+# vamos verificar se devemos limpar. Se quiseres que o clipe pare sozinho ao fazer F5, removemos o "clipe" daqui.
+# ATENÇÃO: Aqui limpamos se o comando for "parar" ou se não houver fila ativa e o comando for antigo.
+if comando == "parar" or not comando:
     if url_video or cantor_atual or musica_atual:
-        try:
-            requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
-            url_video = ""
-            cantor_atual = ""
-            musica_atual = ""
-        except:
-            pass
+        requests.patch(URL_STATUS, json={"comando": "parar", "cantor": "", "musica": "", "url_video": ""})
+        url_video = ""
+        cantor_atual = ""
+        musica_atual = ""
+        comando = "parar"
 
 # SE O COMANDO FOR PARA CANTAR (KARAOKE)
 if comando in ["aguardando_play", "play"] and url_video:
@@ -136,7 +137,6 @@ if comando in ["aguardando_play", "play"] and url_video:
 
             let loopVerificacao = null;
             let jaSaiu = false;
-
             video.loop = false;
 
             function voltarParaPrincipal() {{
@@ -277,7 +277,6 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <!-- REMOVIDO O AUTOPLAY DA TAG E PASSADO PARA O JS PARA EVITAR LOOP DE CACHE -->
                     <video id="mini-video" muted playsinline>
                         <source src="{url_video}" type="video/mp4">
                     </video>
@@ -297,11 +296,8 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
-                    // FORÇAR LOOP DESLIGADO NO ELEMENTO DE VÍDEO
                     v.loop = false;
                     v.autoplay = false;
-
-                    // Inicia a reprodução controlada via JS
                     v.play().catch(e => console.log(e));
 
                     v.ontimeupdate = function() {{
@@ -313,7 +309,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO DO MINI-PLAYER TERMINA, DESTRÓI O SRC E LIMPA O FIREBASE DIRETAMENTE
+                    // QUANDO O VÍDEO TERMINA, LIMPA IMEDIATAMENTE O FIREBASE E FORÇA O REFRESH COM PARÂMETRO DE RESET
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
@@ -329,7 +325,7 @@ else:
                                 "url_video": ""
                             }})
                         }}).finally(() => {{
-                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + '{slug}' + '&t=' + new Date().getTime());
+                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + '{slug}' + '&reset=1&t=' + new Date().getTime());
                         }});
                     }};
 
@@ -351,7 +347,8 @@ else:
                         fetch('{URL_STATUS}?nocache=' + new Date().getTime())
                             .then(response => response.json())
                             .then(data => {{
-                                if (data && (data.comando === 'aguardando_play' || data.comando === 'play')) {{
+                                if (data && (data.comando === 'aguardando_play' || data.comando === 'play' || (data.comando === 'clipe' && data.url_video))) {{
+                                    // Só recarrega se houver alteração real no comando
                                     window.location.reload();
                                 }}
                             }}).catch(err => console.log(err));
