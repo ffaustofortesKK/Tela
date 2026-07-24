@@ -44,7 +44,7 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-# SEGURANÇA: Se não for um comando ativo de canto ou clipe, limpa o vídeo pendente no Firebase para nunca repetir sozinho
+# SEGURANÇA: Se não for um comando ativo, limpa o Firebase para nunca reativar sozinho
 if comando not in ["aguardando_play", "play", "clipe"]:
     if url_video or cantor_atual or musica_atual:
         try:
@@ -136,6 +136,8 @@ if comando in ["aguardando_play", "play"] and url_video:
 
             let loopVerificacao = null;
             let jaSaiu = false;
+
+            video.loop = false;
 
             function voltarParaPrincipal() {{
                 if (jaSaiu) return;
@@ -239,7 +241,7 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe"
+        # SÓ MOSTRA O VÍDEO SE O COMANDO FOR EXATAMENTE "clipe" E HOUVER URL
         if comando == "clipe" and url_video:
             nome_clipe_atual = res_status.get("musica")
             if nome_clipe_atual:
@@ -275,7 +277,8 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <video id="mini-video" autoplay muted playsinline>
+                    <!-- REMOVIDO O AUTOPLAY DA TAG E PASSADO PARA O JS PARA EVITAR LOOP DE CACHE -->
+                    <video id="mini-video" muted playsinline>
                         <source src="{url_video}" type="video/mp4">
                     </video>
                     
@@ -294,8 +297,11 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
+                    // FORÇAR LOOP DESLIGADO NO ELEMENTO DE VÍDEO
                     v.loop = false;
+                    v.autoplay = false;
 
+                    // Inicia a reprodução controlada via JS
                     v.play().catch(e => console.log(e));
 
                     v.ontimeupdate = function() {{
@@ -307,7 +313,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO ACABA, LIMPA COMPLETAMENTE O FIREBASE E RECARREGA EM BRANCO
+                    // QUANDO O VÍDEO DO MINI-PLAYER TERMINA, DESTRÓI O SRC E LIMPA O FIREBASE DIRETAMENTE
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
