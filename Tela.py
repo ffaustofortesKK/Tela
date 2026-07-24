@@ -110,7 +110,6 @@ if comando in ["aguardando_play", "play"] and url_video:
                 <div class="header-info">
                     <h2>🎤 A cantar: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h2>
                 </div>
-                <!-- ATENÇÃO: controls playsinline (SEM LOOP) -->
                 <video id="karaokeVideo" controls playsinline>
                     <source src="{url_video}" type="video/mp4">
                     O seu browser não suporta vídeo.
@@ -133,6 +132,7 @@ if comando in ["aguardando_play", "play"] and url_video:
 
             let loopVerificacao = null;
             let jaSaiu = false;
+            video.loop = false;
 
             function voltarParaPrincipal() {{
                 if (jaSaiu) return;
@@ -150,7 +150,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                         "comando": "clipe",
                         "cantor": "",
                         "musica": "",
-                        "url_video": urlClipeSeguro
+                        "url_video": ""
                     }})
                 }}).finally(() => {{
                     window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
@@ -181,7 +181,6 @@ if comando in ["aguardando_play", "play"] and url_video:
                 let p = video.play();
                 if (p !== undefined) {{
                     p.catch(error => {{
-                        console.log("Autoplay bloqueado pelo browser.");
                         btnManual.style.display = 'block';
                     }});
                 }}
@@ -207,17 +206,6 @@ if comando in ["aguardando_play", "play"] and url_video:
                 video.play();
             }}
 
-            let monitorContagem = setInterval(() => {{
-                fetch(urlStatus + '?nocache=' + new Date().getTime())
-                    .then(res => res.json())
-                    .then(data => {{
-                        if (data && (data.url_video !== urlVideoAtual || data.cantor !== cantorAtual || data.comando === 'parar' || data.comando === 'clipe')) {{
-                            clearInterval(monitorContagem);
-                            window.location.replace(window.location.href.split('?')[0] + '?prestador=' + slugPrestador + '&t=' + new Date().getTime());
-                        }}
-                    }}).catch(err => console.log(err));
-            }}, 800);
-
             setTimeout(iniciarContagem, 500);
         </script>
     </body>
@@ -228,7 +216,7 @@ if comando in ["aguardando_play", "play"] and url_video:
 # ESTADO NORMAL / PARAR (Fila de espera e vídeo de fundo)
 else:
     if comando == "parar":
-        requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": st.session_state.ultimo_clipe_valido})
+        requests.patch(URL_STATUS, json={"comando": "clipe", "cantor": "", "musica": "", "url_video": ""})
         st.rerun()
 
     cl1, cl2 = st.columns([1.4, 1.2])
@@ -288,13 +276,13 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <!-- GARANTIDO SEM LOOP: autoplay muted playsinline (SEM LOOP) -->
-                    <video id="mini-video" autoplay muted playsinline>
+                    <!-- SEM AUTOPLAY DIRETO E SEM LOOP -->
+                    <video id="mini-video" muted playsinline>
                         <source src="{url_clipe}" type="video/mp4">
                     </video>
                     
                     <div class="mini-controls">
-                        <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
+                        <button id="btn-play-pause" onclick="togglePlay()">▶️</button>
                         <span id="mini-time" class="mini-time">00:00</span>
                         <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
                         <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔇</button>
@@ -308,10 +296,15 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
-                    // Assegura explicitamente via JavaScript que o loop está desligado
+                    // FORÇAR LOOP A FALSE DE FORMA ABSOLUTA
                     v.loop = false;
 
-                    v.play().catch(e => console.log(e));
+                    // Tentar reproduzir de forma segura
+                    v.play().then(() => {{
+                        btnPlay.innerText = "⏸️";
+                    }}).catch(e => {{
+                        console.log("Autoplay impedido:", e);
+                    }});
 
                     v.ontimeupdate = function() {{
                         if (v.duration) {{
@@ -322,7 +315,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO CLIPE TERMINA, LIMPA TOTALMENTE O FIREBASE E DESLIGA A URL PARA NÃO REPETIR
+                    // QUANDO O VÍDEO TERMINA: LIMPA O FIREBASE E BLOQUEIA QUALQUER REPETIÇÃO
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
@@ -343,8 +336,13 @@ else:
                     }};
 
                     function togglePlay() {{
-                        if (v.paused) {{ v.play(); btnPlay.innerText = "⏸️"; }}
-                        else {{ v.pause(); btnPlay.innerText = "▶️"; }}
+                        if (v.paused) {{ 
+                            v.play(); 
+                            btnPlay.innerText = "⏸️"; 
+                        }} else {{ 
+                            v.pause(); 
+                            btnPlay.innerText = "▶️"; 
+                        }}
                     }}
 
                     function mudarSeek(val) {{
@@ -355,16 +353,6 @@ else:
                         v.muted = !v.muted;
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
-
-                    setInterval(() => {{
-                        fetch('{URL_STATUS}?nocache=' + new Date().getTime())
-                            .then(response => response.json())
-                            .then(data => {{
-                                if (data && (data.comando === 'aguardando_play' || data.comando === 'play')) {{
-                                    window.location.reload();
-                                }}
-                            }}).catch(err => console.log(err));
-                    }}, 2000);
                 </script>
             </body>
             </html>
