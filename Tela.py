@@ -110,6 +110,7 @@ if comando in ["aguardando_play", "play"] and url_video:
                 <div class="header-info">
                     <h2>🎤 A cantar: {str(cantor_atual).upper()} - {str(musica_atual).upper()}</h2>
                 </div>
+                <!-- SEM LOOP -->
                 <video id="karaokeVideo" controls playsinline>
                     <source src="{url_video}" type="video/mp4">
                     O seu browser não suporta vídeo.
@@ -189,7 +190,6 @@ if comando in ["aguardando_play", "play"] and url_video:
                     voltarParaPrincipal();
                 }};
 
-                // MONITORIZAÇÃO CONTÍNUA RIGOROSA: Interrompe imediatamente se houver mudança de cantor, url ou comando
                 loopVerificacao = setInterval(() => {{
                     fetch(urlStatus + '?nocache=' + new Date().getTime())
                         .then(res => res.json())
@@ -207,7 +207,6 @@ if comando in ["aguardando_play", "play"] and url_video:
                 video.play();
             }}
 
-            // MONITORIZAÇÃO DURANTE A CONTAGEM DE 3 A 1
             let monitorContagem = setInterval(() => {{
                 fetch(urlStatus + '?nocache=' + new Date().getTime())
                     .then(res => res.json())
@@ -289,7 +288,7 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <!-- VÍDEO DO CLIPE SEM LOOP -->
+                    <!-- VÍDEO CLIPE SEM LOOP: TERMINA E LIMPA O ESTADO NO FIREBASE -->
                     <video id="mini-video" autoplay muted playsinline>
                         <source src="{url_clipe}" type="video/mp4">
                     </video>
@@ -320,7 +319,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO CLIPE TERMINAR, LIMPA O URL NO FIREBASE E RECARREGA PARA FICAR PARADO
+                    // QUANDO O VÍDEO CLIPE CHEGA AO FIM, LIMPA O URL NO FIREBASE E ATUALIZA A TELA (FICA EM ESPERA)
                     v.onended = function() {{
                         fetch('{URL_STATUS}', {{
                             method: 'PATCH',
