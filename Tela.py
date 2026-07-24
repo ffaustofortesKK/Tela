@@ -44,7 +44,7 @@ url_video = res_status.get("url_video")
 cantor_atual = res_status.get("cantor")
 musica_atual = res_status.get("musica")
 
-# Se o comando for "parar" ou inválido, limpa imediatamente o Firebase para evitar lixo acumulado
+# Se o comando for para parar, limpa o Firebase de imediato
 if comando in ["parar", None, ""]:
     if url_video or cantor_atual or musica_atual:
         try:
@@ -228,8 +228,6 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
-        # O vídeo clipe SÓ aparece se o comando for estritamente "clipe" E houver URL válida. 
-        # Assim que termina ou é interrompido, limpamos o Firebase de imediato.
         if comando == "clipe" and url_video:
             nome_clipe_atual = res_status.get("musica")
             if nome_clipe_atual:
@@ -297,7 +295,7 @@ else:
                         }}
                     }};
 
-                    // QUANDO O VÍDEO CLIPE TERMINA, LIMPA O FIREBASE E RECARREGA A PÁGINA SEM O VÍDEO
+                    // QUANDO O VÍDEO TERMINA: LIMPA O FIREBASE E FAZ REDIRECT PARA PARAR A REPETIÇÃO
                     v.onended = function() {{
                         v.pause();
                         v.removeAttribute('src');
@@ -330,6 +328,17 @@ else:
                         v.muted = !v.muted;
                         btnAudio.innerText = v.muted ? "🔇" : "🔊";
                     }}
+
+                    // Apenas verifica alterações no Firebase a cada 3 segundos SEM recarregar o Python inteiro do Streamlit
+                    setInterval(() => {{
+                        fetch('{URL_STATUS}?nocache=' + new Date().getTime())
+                            .then(response => response.json())
+                            .then(data => {{
+                                if (data && (data.comando === 'aguardando_play' || data.comando === 'play' || (data.comando === 'clipe' && data.url_video && data.url_video !== "{url_video}"))) {{
+                                    window.location.reload();
+                                }}
+                            }}).catch(err => console.log(err));
+                    }}, 3000);
                 </script>
             </body>
             </html>
@@ -341,6 +350,19 @@ else:
                     <p style="margin: 0; font-size: 1rem;">Aguardando o prestador selecionar um vídeo clipe no painel de controle...</p>
                 </div>
             """, unsafe_allow_html=True)
-
-    time.sleep(3)
-    st.rerun()
+            
+            # Polling em JavaScript para detetar quando o prestador envia um novo clipe, sem forçar reruns do Streamlit
+            espera_ativa_html = f"""
+            <script>
+                setInterval(() => {{
+                    fetch('{URL_STATUS}?nocache=' + new Date().getTime())
+                        .then(response => response.json())
+                        .then(data => {{
+                            if (data && data.url_video && (data.comando === 'clipe' || data.comando === 'aguardando_play' || data.comando === 'play')) {{
+                                window.location.reload();
+                            }}
+                        }}).catch(err => console.log(err));
+                }}, 2500);
+            </script>
+            """
+            components.html(espera_ativa_html, height=0, scrolling=False)
