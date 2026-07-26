@@ -106,7 +106,7 @@ else:
             else:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
-            # HTML encapsulado estritamente dentro das dimensões do retângulo do vídeo clipe (430x306)
+            # HTML encapsulado com tratamento robusto de erro de carregamento e stream do Cloudinary
             mini_player_html = f"""
             <!DOCTYPE html>
             <html>
@@ -159,15 +159,16 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <video id="mini-video" autoplay loop muted playsinline>
+                    <video id="mini-video" autoplay playsinline controlslist="nodownload">
                         <source src="{url_clipe}" type="video/mp4">
+                        Seu navegador não suporta reprodução de vídeo.
                     </video>
                     
                     <div class="mini-controls">
                         <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
                         <span id="mini-time" class="mini-time">00:00</span>
                         <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
-                        <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔇</button>
+                        <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔊</button>
                     </div>
                 </div>
                 
@@ -178,7 +179,15 @@ else:
                     const btnPlay = document.getElementById('btn-play-pause');
                     const btnAudio = document.getElementById('btn-audio');
 
-                    v.play().catch(e => console.log(e));
+                    var playPromise = v.play();
+                    if (playPromise !== undefined) {{
+                        playPromise.catch(error => {{
+                            console.log("Autoplay bloqueado, exigindo interacção ou mudo:", error);
+                            v.muted = true;
+                            btnAudio.innerText = "🔇";
+                            v.play();
+                        }});
+                    }}
 
                     v.ontimeupdate = function() {{
                         if (v.duration) {{
@@ -201,7 +210,7 @@ else:
 
                     function mudarSeek(val) {{
                         if (v.duration) {{
-                            v.currentTime = (val * v.duration) / 100;
+                            v.currentTime = (val * v.duration) * 100;
                         }}
                     }}
 
