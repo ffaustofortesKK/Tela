@@ -37,12 +37,6 @@ except:
 comando = res_status.get("comando")
 url_video = res_status.get("url_video")
 
-# --- TESTE TEMPORÁRIO DE DIAGNÓSTICO ---
-# Se o vídeo de teste abrir, o problema é restrição do link/CORS no Cloudinary.
-# Quando quiser voltar aos seus vídeos, basta apagar ou comentar a linha abaixo.
-url_video = "https://www.w3schools.com/html/mov_bbb.mp4"
-# ----------------------------------------
-
 # 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DE EXECUTAR O PEDIDO
 if comando == "aguardando_play":
     st.markdown(f"""
@@ -89,45 +83,47 @@ else:
         
         nome_clipe_atual = res_status.get("musica")
 
+        # DIAGNÓSTICO VISUAL: Mostra na tela exatamente o link que o Firebase enviou
+        st.caption(f"Link recebido do Firebase: `{url_video}`")
+
         if url_video:
             if nome_clipe_atual:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
             else:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
-            player_iframe_html = f"""
+            player_html = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <style>
                     body, html {{
-                        margin: 0; padding: 0; width: 430px; height: 306px; background: black; overflow: hidden;
+                        margin: 0; padding: 0; width: 100%; height: 300px; background: black; overflow: hidden;
                     }}
-                    iframe {{
-                        width: 430px; height: 306px; border: none; background: black;
+                    video {{
+                        width: 100%; height: 300px; object-fit: contain; background: black;
                     }}
                 </style>
             </head>
             <body>
-                <video id="video-player" width="430" height="306" controls autoplay style="background: black; object-fit: fill;">
+                <video id="vid" controls autoplay playsinline>
                     <source src="{url_video}" type="video/mp4">
-                    <source src="{url_video}" type="video/webm">
-                    Seu navegador não suporta a tag de vídeo.
+                    Seu navegador não suporta vídeo.
                 </video>
                 <script>
-                    const vid = document.getElementById('video-player');
-                    vid.play().catch(error => {{
-                        vid.muted = true;
-                        vid.play();
+                    const v = document.getElementById('vid');
+                    v.play().catch(e => {{
+                        v.muted = true;
+                        v.play();
                     }});
                 </script>
             </body>
             </html>
             """
-            components.html(player_iframe_html, height=316, scrolling=False)
+            components.html(player_html, height=310, scrolling=False)
         else:
             st.markdown("""
-                <div style="width: 430px; height: 306px; background: black; border: 2px solid #ffd700; border-radius: 4px; display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
+                <div style="width: 100%; height: 300px; background: black; border: 2px solid #ffd700; border-radius: 4px; display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
                     <p style="margin: 0; font-size: 1rem;">Aguardando o prestador selecionar um vídeo clipe no painel de controle...</p>
                 </div>
             """, unsafe_allow_html=True)
