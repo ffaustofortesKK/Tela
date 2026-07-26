@@ -16,23 +16,6 @@ st.markdown("""
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
         .cantor-style { color: white; font-weight: bold; text-shadow: 2px 2px 4px #000; }
         .musica-style { color: yellow; font-weight: bold; text-shadow: 2px 2px 4px #000; }
-        .video-clipe-box { 
-            width: 430px; 
-            height: 306px;
-            background: black; 
-            padding: 0px; 
-            border-radius: 4px; 
-            border: 2px solid #ffd700; 
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .video-clipe-box video {
-            width: 100%;
-            height: 100%;
-            object-fit: fill; 
-        }
         .contador-box { font-size: 8rem; color: yellow; font-weight: bold; text-shadow: 0 0 20px red; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
@@ -71,23 +54,24 @@ if comando == "aguardando_play":
         placeholder_contagem.markdown(f'<div class="contador-box">{i}</div>', unsafe_allow_html=True)
         time.sleep(1)
     
-    # Após a contagem, limpa o comando para voltar ao estado normal da tela principal
     requests.patch(URL_STATUS, json={"comando": "fim"})
     st.rerun()
 
-# 2. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO DENTRO DO RETÂNGULO À DIREITA
+# 2. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO HTML5 À DIREITA
 else:
+    st.markdown("<h1 style='color:white; font-size: 2.2rem; margin-bottom: 20px;'>📺 FFKaraoke — Palco Principal</h1>", unsafe_allow_html=True)
+    
     cl1, cl2 = st.columns([1.4, 1.2])
 
     with cl1:
-        st.markdown("<h1 style='color:gold; font-size: 2.2rem; margin-bottom: 15px;'>🎤 FILA DE ESPERA</h1>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color:gold; font-size: 1.8rem; margin-bottom: 15px;'>🎤 FILA DE ESPERA</h3>", unsafe_allow_html=True)
         
         if res_pedidos:
             pedidos_lista = list(res_pedidos.items())
             contador_exibicao = 1
             for p_id, p in pedidos_lista:
                 if not str(p.get('musica', '')).startswith("PEDIDO:"):
-                    st.markdown(f"<h3 style='margin: 10px 0; font-size: 1.3rem;'>{contador_exibicao}. <span class='cantor-style'>{str(p.get('cantor')).upper()}</span> ➔ <span class='musica-style'>{str(p.get('musica')).upper()}</span></h3>", unsafe_allow_html=True)
+                    st.markdown(f"<h4 style='margin: 10px 0; font-size: 1.2rem;'>{contador_exibicao}. <span class='cantor-style'>{str(p.get('cantor')).upper()}</span> ➔ <span class='musica-style'>{str(p.get('musica')).upper()}</span></h4>", unsafe_allow_html=True)
                     contador_exibicao += 1
             if contador_exibicao == 1:
                 st.info("Ainda sem cantores na fila.")
@@ -95,21 +79,17 @@ else:
             st.info("A fila está vazia. Envie músicas pelo telemóvel!")
 
     with cl2:
-        st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h3>", unsafe_allow_html=True)
         
-        # LINHA DE DIAGNÓSTICO: Mostra exatamente o que veio do Firebase na tela da TV
-        st.write("DEBUG URL:", url_video)
-
-        url_clipe = res_status.get("url_video")
         nome_clipe_atual = res_status.get("musica")
 
-        if url_clipe:
+        if url_video:
             if nome_clipe_atual:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo: {nome_clipe_atual}</p>", unsafe_allow_html=True)
             else:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
-            # HTML encapsulado com tratamento robusto de erro de carregamento e stream do Cloudinary
+            # Componente HTML5 Puro (Garante que o vídeo abre e toca sem falhas do Streamlit)
             mini_player_html = f"""
             <!DOCTYPE html>
             <html>
@@ -162,8 +142,8 @@ else:
             </head>
             <body>
                 <div class="mini-container">
-                    <video id="mini-video" autoplay playsinline controlslist="nodownload">
-                        <source src="{url_clipe}" type="video/mp4">
+                    <video id="mini-video" autoplay playsinline>
+                        <source src="{url_video}" type="video/mp4">
                         Seu navegador não suporta reprodução de vídeo.
                     </video>
                     
@@ -185,7 +165,6 @@ else:
                     var playPromise = v.play();
                     if (playPromise !== undefined) {{
                         playPromise.catch(error => {{
-                            console.log("Autoplay bloqueado, exigindo interacção ou mudo:", error);
                             v.muted = true;
                             btnAudio.innerText = "🔇";
                             v.play();
@@ -228,7 +207,7 @@ else:
             components.html(mini_player_html, height=316, scrolling=False)
         else:
             st.markdown("""
-                <div class="video-clipe-box" style="display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
+                <div style="width: 430px; height: 306px; background: black; border: 2px solid #ffd700; border-radius: 4px; display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
                     <p style="margin: 0; font-size: 1rem;">Aguardando o prestador selecionar um vídeo clipe no painel de controle...</p>
                 </div>
             """, unsafe_allow_html=True)
