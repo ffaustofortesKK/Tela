@@ -89,7 +89,6 @@ else:
             else:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
-            # Utilização de um leitor HTML otimizado com suporte nativo de iframe de vídeo directo
             player_iframe_html = f"""
             <!DOCTYPE html>
             <html>
