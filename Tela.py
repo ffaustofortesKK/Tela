@@ -57,7 +57,7 @@ if comando == "aguardando_play":
     requests.patch(URL_STATUS, json={"comando": "fim"})
     st.rerun()
 
-# 2. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E VÍDEO HTML5 À DIREITA
+# 2. TELA PRINCIPAL: FILA DE ESPERA À ESQUERDA E PLAYER À DIREITA
 else:
     st.markdown("<h1 style='color:white; font-size: 2.2rem; margin-bottom: 20px;'>📺 FFKaraoke — Palco Principal</h1>", unsafe_allow_html=True)
     
@@ -89,8 +89,8 @@ else:
             else:
                 st.markdown(f"<p style='color: #00ff00; font-weight: bold; margin-bottom: 5px;'>▶️ Reproduzindo vídeo</p>", unsafe_allow_html=True)
             
-            # Componente HTML5 Puro (Garante que o vídeo abre e toca sem falhas do Streamlit)
-            mini_player_html = f"""
+            # Utilização de um leitor HTML otimizado com suporte nativo de iframe de vídeo directo
+            player_iframe_html = f"""
             <!DOCTYPE html>
             <html>
             <head>
@@ -98,113 +98,28 @@ else:
                     body, html {{
                         margin: 0; padding: 0; width: 430px; height: 306px; background: black; overflow: hidden;
                     }}
-                    .mini-container {{
-                        position: relative; width: 430px; height: 306px; background: black; display: flex; justify-content: center; align-items: center;
-                    }}
-                    video {{
-                        width: 100%; height: 100%; object-fit: fill;
-                    }}
-                    .mini-controls {{
-                        position: absolute;
-                        bottom: 5px;
-                        left: 5px;
-                        right: 5px;
-                        background: rgba(0, 0, 0, 0.85);
-                        border: 1px solid #ffd700;
-                        padding: 5px 10px;
-                        border-radius: 6px;
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        box-sizing: border-box;
-                    }}
-                    .mini-controls button {{
-                        background: #ffd700;
-                        border: none;
-                        color: black;
-                        font-weight: bold;
-                        padding: 4px 8px;
-                        border-radius: 4px;
-                        cursor: pointer;
-                        font-size: 0.8rem;
-                    }}
-                    .mini-controls input[type=range] {{
-                        cursor: pointer;
-                        accent-color: #ffd700;
-                        height: 4px;
-                    }}
-                    .mini-time {{
-                        color: white;
-                        font-family: monospace;
-                        font-size: 0.75rem;
+                    iframe {{
+                        width: 430px; height: 306px; border: none; background: black;
                     }}
                 </style>
             </head>
             <body>
-                <div class="mini-container">
-                    <video id="mini-video" autoplay playsinline>
-                        <source src="{url_video}" type="video/mp4">
-                        Seu navegador não suporta reprodução de vídeo.
-                    </video>
-                    
-                    <div class="mini-controls">
-                        <button id="btn-play-pause" onclick="togglePlay()">⏸️</button>
-                        <span id="mini-time" class="mini-time">00:00</span>
-                        <input type="range" id="mini-seek" value="0" min="0" max="100" step="0.1" style="flex-grow: 1;" oninput="mudarSeek(this.value)">
-                        <button onclick="mudarAudio()" id="btn-audio" style="background: #333; color: white;">🔊</button>
-                    </div>
-                </div>
-                
+                <video id="video-player" width="430" height="306" controls autoplay style="background: black; object-fit: fill;">
+                    <source src="{url_video}" type="video/mp4">
+                    <source src="{url_video}" type="video/webm">
+                    Seu navegador não suporta a tag de vídeo.
+                </video>
                 <script>
-                    const v = document.getElementById('mini-video');
-                    const seek = document.getElementById('mini-seek');
-                    const timeLbl = document.getElementById('mini-time');
-                    const btnPlay = document.getElementById('btn-play-pause');
-                    const btnAudio = document.getElementById('btn-audio');
-
-                    var playPromise = v.play();
-                    if (playPromise !== undefined) {{
-                        playPromise.catch(error => {{
-                            v.muted = true;
-                            btnAudio.innerText = "🔇";
-                            v.play();
-                        }});
-                    }}
-
-                    v.ontimeupdate = function() {{
-                        if (v.duration) {{
-                            seek.value = (v.currentTime / v.duration) * 100;
-                            let m = Math.floor(v.currentTime / 60);
-                            let s = Math.floor(v.currentTime % 60);
-                            timeLbl.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
-                        }}
-                    }};
-
-                    function togglePlay() {{
-                        if (v.paused) {{
-                            v.play();
-                            btnPlay.innerText = "⏸️";
-                        }} else {{
-                            v.pause();
-                            btnPlay.innerText = "▶️";
-                        }}
-                    }}
-
-                    function mudarSeek(val) {{
-                        if (v.duration) {{
-                            v.currentTime = (val * v.duration) * 100;
-                        }}
-                    }}
-
-                    function mudarAudio() {{
-                        v.muted = !v.muted;
-                        btnAudio.innerText = v.muted ? "🔇" : "🔊";
-                    }}
+                    const vid = document.getElementById('video-player');
+                    vid.play().catch(error => {{
+                        vid.muted = true;
+                        vid.play();
+                    }});
                 </script>
             </body>
             </html>
             """
-            components.html(mini_player_html, height=316, scrolling=False)
+            components.html(player_iframe_html, height=316, scrolling=False)
         else:
             st.markdown("""
                 <div style="width: 430px; height: 306px; background: black; border: 2px solid #ffd700; border-radius: 4px; display: flex; align-items: center; justify-content: center; text-align: center; color: #888; padding: 20px;">
