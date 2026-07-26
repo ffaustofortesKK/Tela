@@ -97,6 +97,9 @@ else:
     with cl2:
         st.markdown("<h1 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h1>", unsafe_allow_html=True)
         
+        # LINHA DE DIAGNÓSTICO: Mostra exatamente o que veio do Firebase na tela da TV
+        st.write("DEBUG URL:", url_video)
+
         url_clipe = res_status.get("url_video")
         nome_clipe_atual = res_status.get("musica")
 
