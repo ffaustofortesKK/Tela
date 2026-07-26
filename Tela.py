@@ -37,6 +37,12 @@ except:
 comando = res_status.get("comando")
 url_video = res_status.get("url_video")
 
+# --- TESTE TEMPORÁRIO DE DIAGNÓSTICO ---
+# Se o vídeo de teste abrir, o problema é restrição do link/CORS no Cloudinary.
+# Quando quiser voltar aos seus vídeos, basta apagar ou comentar a linha abaixo.
+url_video = "https://www.w3schools.com/html/mov_bbb.mp4"
+# ----------------------------------------
+
 # 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DE EXECUTAR O PEDIDO
 if comando == "aguardando_play":
     st.markdown(f"""
