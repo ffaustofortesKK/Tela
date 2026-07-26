@@ -37,6 +37,12 @@ except:
 comando = res_status.get("comando")
 url_video = res_status.get("url_video")
 
+# CORREÇÃO AUTOMÁTICA DE FORMATO: 
+# Se o link for do Cloudinary e terminar em .avi (ou outro), força a conversão limpa para .mp4
+if url_video and "cloudinary.com" in url_video:
+    if ".avi" in url_video.lower():
+        url_video = url_video.rsplit(".", 1)[0] + ".mp4"
+
 # 1. CONTAGEM DECRESCENTE (3, 2, 1, 0) ANTES DE EXECUTAR O PEDIDO
 if comando == "aguardando_play":
     st.markdown(f"""
@@ -82,9 +88,6 @@ else:
         st.markdown("<h3 style='color:gold; font-size: 1.8rem; margin-bottom: 5px;'>📺 VÍDEO CLIPE (FUNDO)</h3>", unsafe_allow_html=True)
         
         nome_clipe_atual = res_status.get("musica")
-
-        # DIAGNÓSTICO VISUAL: Mostra na tela exatamente o link que o Firebase enviou
-        st.caption(f"Link recebido do Firebase: `{url_video}`")
 
         if url_video:
             if nome_clipe_atual:
